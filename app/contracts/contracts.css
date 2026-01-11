@@ -1,0 +1,18 @@
+@import '../dashboard/dashboard.css';
+
+.contract-status {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.contract-active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.contract-ended {
+  background: #fee2e2;
+  color: #991b1b;
+}
