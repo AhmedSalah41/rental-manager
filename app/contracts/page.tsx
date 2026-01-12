@@ -84,10 +84,12 @@ function buildInstallments(
   const endDate = new Date(end);
 
   while (current < endDate) {
+  const due = addMonths(new Date(startDate), step * (i + 1));
+
     rows.push({
-      contract_id: contractId,
-      due_date: current.toISOString().slice(0, 10),
-      amount: rentAmount * step,
+      contract_id: contract.id,
+      due_date: due.toISOString().slice(0, 10), // ✅ مهم جدًا
+      amount: installmentAmount,
       status: 'pending',
     });
 
