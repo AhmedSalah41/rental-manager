@@ -3,13 +3,27 @@
 import AppShell from '@/components/AppShell';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '@/lib/supabaseClient';
+
+type Property = {
+  id: string;
+  code: string;
+  type: string;
+  location?: string;
+  location_text?: string;
+  area?: number;
+  status?: string;
+};
 
 export default function PropertiesPage() {
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<Property[]>([]);
 
   const load = async () => {
-    const { data } = await supabase.from('properties').select('*').order('created_at', { ascending: false });
+    const { data } = await supabase
+      .from('properties')
+      .select('*')
+      .order('created_at', { ascending: false });
+
     setRows(data || []);
   };
 
@@ -18,56 +32,66 @@ export default function PropertiesPage() {
   }, []);
 
   return (
-    <AppShell>
+    <AppShell title="العقارات">
+      {/* ===== Header ===== */}
       <div className="page-header">
         <div>
           <h1>العقارات</h1>
           <p>عرض جميع العقارات</p>
         </div>
-        <div className="header-actions">
-          <Link className="btn btn-primary" href="/properties/add">
-            <i className="fas fa-plus" /> إضافة عقار
-          </Link>
-        </div>
+
+        <Link href="/properties/add" className="primary-btn">
+          + إضافة عقار
+        </Link>
       </div>
 
-      <div className="content-card">
-        <div className="card-body">
-          <table className="data-table">
-            <thead>
+      {/* ===== Table ===== */}
+      <div className="card">
+        <h3 className="card-title">قائمة العقارات</h3>
+
+        <table className="table">
+          <thead>
+            <tr>
+              <th>كود العقار</th>
+              <th>النوع</th>
+              <th>الموقع</th>
+              <th>المساحة</th>
+              <th>الحالة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && (
               <tr>
-                <th>كود العقار</th>
-                <th>النوع</th>
-                <th>الموقع</th>
-                <th>المساحة</th>
-                <th>الحالة</th>
+                <td colSpan={5} style={{ textAlign: 'center' }} className="muted">
+                  لا توجد بيانات بعد
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {rows.map((p) => (
-                <tr key={p.id}>
-                  <td><strong>{p.code}</strong></td>
-                  <td>{p.type}</td>
-                  <td>{p.location_text || p.location || '-'}</td>
-                  <td>{p.area ? `${p.area}` : '-'}</td>
-                  <td>
-                    {p.status === 'rented' && <span className="badge badge-success">مؤجر</span>}
-                    {p.status === 'vacant' && <span className="badge badge-warning">فاضي</span>}
-                    {p.status === 'maintenance' && <span className="badge badge-danger">صيانة</span>}
-                    {!['rented','vacant','maintenance'].includes(p.status) && <span className="badge">{p.status}</span>}
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', color: 'var(--gray-color)' }}>
-                    لا توجد بيانات بعد
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+            )}
+
+            {rows.map((p) => (
+              <tr key={p.id}>
+                <td><strong>{p.code}</strong></td>
+                <td>{p.type || '-'}</td>
+                <td>{p.location_text || p.location || '-'}</td>
+                <td>{p.area ?? '-'}</td>
+                <td>
+                  {p.status === 'rented' && (
+                    <span className="badge success">مؤجر</span>
+                  )}
+                  {p.status === 'vacant' && (
+                    <span className="badge warning">فاضي</span>
+                  )}
+                  {p.status === 'maintenance' && (
+                    <span className="badge danger">صيانة</span>
+                  )}
+                  {!['rented', 'vacant', 'maintenance'].includes(
+                    p.status || ''
+                  ) && <span className="badge">{p.status || '-'}</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </AppShell>
   );
