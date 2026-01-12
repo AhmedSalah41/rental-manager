@@ -1,11 +1,11 @@
 'use client';
 
 import AppShell from '@/components/AppShell';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
 /* =====================
-   Type للعرض فقط
+   Types (بعد التطبيع)
 ===================== */
 type PaymentRow = {
   id: string;
@@ -22,6 +22,7 @@ type PaymentRow = {
 ===================== */
 export default function PaymentsPage() {
   const [rows, setRows] = useState<PaymentRow[]>([]);
+  const [filter, setFilter] = useState<'all' | 'pending' | 'paid'>('all');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -50,13 +51,13 @@ export default function PaymentsPage() {
       .order('due_date', { ascending: true });
 
     if (error) {
-      console.error('PAYMENTS ERROR:', error);
+      console.error(error);
       setRows([]);
       setLoading(false);
       return;
     }
 
-    // ✅ هنا الحل: نحول الداتا لشكل بسيط
+    // ✅ تطبيع الداتا (حل نهائي للمشكلة)
     const normalized: PaymentRow[] = (data ?? []).map((row: any) => {
       const contract = row.contracts?.[0];
 
@@ -76,18 +77,82 @@ export default function PaymentsPage() {
   }
 
   /* =====================
+     Pay Installment
+  ===================== */
+  async function markAsPaid(id: string) {
+    const { error } = await supabase
+      .from('installments')
+      .update({ status: 'paid' })
+      .eq('id', id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    loadPayments();
+  }
+
+  /* =====================
+     Filters & Totals
+  ===================== */
+  const filteredRows = useMemo(() => {
+    if (filter === 'all') return rows;
+    return rows.filter((r) => r.status === filter);
+  }, [rows, filter]);
+
+  const totalAmount = useMemo(
+    () => rows.reduce((sum, r) => sum + r.amount, 0),
+    [rows]
+  );
+
+  const paidAmount = useMemo(
+    () => rows.filter(r => r.status === 'paid').reduce((s, r) => s + r.amount, 0),
+    [rows]
+  );
+
+  const remainingAmount = totalAmount - paidAmount;
+
+  /* =====================
      UI
   ===================== */
   return (
     <AppShell title="الاستحقاقات">
+      {/* ===== Summary ===== */}
+      <div className="content-card">
+        <div className="card-body" style={{ display: 'flex', gap: 24 }}>
+          <div>
+            <strong>الإجمالي:</strong> {totalAmount.toLocaleString()}
+          </div>
+          <div>
+            <strong>المدفوع:</strong> {paidAmount.toLocaleString()}
+          </div>
+          <div>
+            <strong>المتبقي:</strong> {remainingAmount.toLocaleString()}
+          </div>
+        </div>
+      </div>
+
+      {/* ===== Filters ===== */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+        <button className="btn btn-outline" onClick={() => setFilter('all')}>
+          الكل
+        </button>
+        <button className="btn btn-outline" onClick={() => setFilter('pending')}>
+          القادمة
+        </button>
+        <button className="btn btn-outline" onClick={() => setFilter('paid')}>
+          المدفوعة
+        </button>
+      </div>
+
+      {/* ===== Table ===== */}
       <div className="content-card">
         <div className="card-body">
-          <h3 className="card-title">الاستحقاقات والمدفوعات</h3>
-
           {loading ? (
             <p className="muted">جاري التحميل...</p>
-          ) : rows.length === 0 ? (
-            <p className="muted">لا توجد استحقاقات</p>
+          ) : filteredRows.length === 0 ? (
+            <p className="muted">لا توجد بيانات</p>
           ) : (
             <table className="data-table">
               <thead>
@@ -98,10 +163,11 @@ export default function PaymentsPage() {
                   <th>تاريخ الاستحقاق</th>
                   <th>المبلغ</th>
                   <th>الحالة</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {filteredRows.map((r) => (
                   <tr key={r.id}>
                     <td>{r.contract_no}</td>
                     <td>{r.property_code}</td>
@@ -109,11 +175,20 @@ export default function PaymentsPage() {
                     <td>{r.due_date}</td>
                     <td>{r.amount.toLocaleString()}</td>
                     <td>
-                      {r.status === 'paid' && (
+                      {r.status === 'paid' ? (
                         <span className="badge badge-success">مدفوع</span>
-                      )}
-                      {r.status === 'pending' && (
+                      ) : (
                         <span className="badge badge-warning">قادم</span>
+                      )}
+                    </td>
+                    <td>
+                      {r.status === 'pending' && (
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => markAsPaid(r.id)}
+                        >
+                          دفع
+                        </button>
                       )}
                     </td>
                   </tr>
