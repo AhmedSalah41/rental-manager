@@ -8,8 +8,15 @@ import { supabase } from '@/lib/supabaseClient';
    Types
 ======================= */
 
-type Property = { id: string; code: string };
-type Tenant = { id: string; name: string };
+type Property = {
+  id: string | number;
+  code: string;
+};
+
+type Tenant = {
+  id: string | number;
+  name: string;
+};
 
 type ContractRow = {
   id: string;
@@ -18,7 +25,23 @@ type ContractRow = {
   end_date: string;
   duration_months: number;
   rent_amount: number;
-  pay_frequency: 'monthly' | 'quarterly' | 'yearly';
+  pay_frequency: string;
+
+  contract_type?: string;
+  contract_place?: string;
+
+  deed_number?: string;
+  deed_issue_date?: string;
+  deed_issue_place?: string;
+
+  unit_type?: string;
+  unit_no?: string;
+  floor_no?: string;
+  unit_area?: number;
+  has_mezzanine?: boolean;
+  electricity_meter?: string;
+  water_meter?: string;
+
   properties: { code: string }[];
   tenants: { name: string }[];
 };
@@ -27,16 +50,13 @@ type ContractRow = {
    Helpers
 ======================= */
 
-function monthsBetween(start: string, end: string) {
+function calculateDurationMonths(start: string, end: string): number {
   const s = new Date(start);
   const e = new Date(end);
-  return (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth());
-}
 
-function addMonths(date: Date, months: number) {
-  const d = new Date(date);
-  d.setMonth(d.getMonth() + months);
-  return d;
+  if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) return 0;
+
+  return (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth());
 }
 
 /* =======================
@@ -48,18 +68,39 @@ export default function ContractsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [contracts, setContracts] = useState<ContractRow[]>([]);
 
+  // ===== بيانات أساسية =====
   const [contractNo, setContractNo] = useState('');
-  const [propertyId, setPropertyId] = useState('');
+  const [propertyId, setPropertyId] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [rentAmount, setRentAmount] = useState(0);
+  const [rentAmount, setRentAmount] = useState<number>(0);
   const [payFrequency, setPayFrequency] =
     useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
 
+  // ===== بيانات العقد (إضافية) =====
+  const [contractType, setContractType] = useState(''); // new / renewal
+  const [contractPlace, setContractPlace] = useState('');
+
+  // ===== بيانات الصك =====
+  const [deedNumber, setDeedNumber] = useState('');
+  const [deedIssueDate, setDeedIssueDate] = useState('');
+  const [deedIssuePlace, setDeedIssuePlace] = useState('');
+
+  // ===== بيانات الوحدة الإيجارية =====
+  const [unitType, setUnitType] = useState('');
+  const [unitNo, setUnitNo] = useState('');
+  const [floorNo, setFloorNo] = useState('');
+  const [unitArea, setUnitArea] = useState<number>(0);
+  const [hasMezzanine, setHasMezzanine] = useState(false);
+  const [electricityMeter, setElectricityMeter] = useState('');
+  const [waterMeter, setWaterMeter] = useState('');
+
+  const [saving, setSaving] = useState(false);
+
   const durationMonths = useMemo(() => {
     if (!startDate || !endDate) return 0;
-    return monthsBetween(startDate, endDate);
+    return calculateDurationMonths(startDate, endDate);
   }, [startDate, endDate]);
 
   /* =======================
@@ -68,88 +109,196 @@ export default function ContractsPage() {
 
   useEffect(() => {
     loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadAll() {
-    const [{ data: p }, { data: t }, { data: c }] = await Promise.all([
-      supabase.from('properties').select('id, code'),
-      supabase.from('tenants').select('id, name'),
-      supabase
-        .from('contracts')
-        .select(`
-          id, contract_no, start_date, end_date,
-          duration_months, rent_amount, pay_frequency,
-          properties(code), tenants(name)
-        `)
-        .order('created_at', { ascending: false }),
-    ]);
+    await Promise.all([loadProperties(), loadTenants(), loadContracts()]);
+  }
 
-    setProperties(p || []);
-    setTenants(t || []);
-    setContracts(c || []);
+  async function loadProperties() {
+    const { data, error } = await supabase
+      .from('properties')
+      .select('id, code')
+      .order('created_at', { ascending: false });
+
+    if (!error) setProperties(data || []);
+  }
+
+  async function loadTenants() {
+    const { data, error } = await supabase
+      .from('tenants')
+      .select('id, name')
+      .order('created_at', { ascending: false });
+
+    if (!error) setTenants(data || []);
+  }
+
+  async function loadContracts() {
+    const { data, error } = await supabase
+      .from('contracts')
+      .select(
+        `
+        id,
+        contract_no,
+        start_date,
+        end_date,
+        duration_months,
+        rent_amount,
+        pay_frequency,
+
+        contract_type,
+        contract_place,
+
+        deed_number,
+        deed_issue_date,
+        deed_issue_place,
+
+        unit_type,
+        unit_no,
+        floor_no,
+        unit_area,
+        has_mezzanine,
+        electricity_meter,
+        water_meter,
+
+        properties ( code ),
+        tenants ( name )
+      `
+      )
+      .returns<ContractRow[]>()
+      .order('created_at', { ascending: false });
+
+    if (!error) setContracts(data ?? []);
   }
 
   /* =======================
-     Add Contract + Installments
+     Add Contract + Generate Installments
   ======================= */
 
   async function addContract() {
-    if (!contractNo || !propertyId || !tenantId || !startDate || !endDate) {
-      alert('كمّل البيانات');
-      return;
-    }
+    // validations أساسية
+    if (!contractNo.trim()) return alert('اكتب رقم العقد');
+    if (!propertyId) return alert('اختار العقار');
+    if (!tenantId) return alert('اختار المستأجر');
+    if (!startDate) return alert('اختار تاريخ البداية');
+    if (!endDate) return alert('اختار تاريخ النهاية');
+    if (durationMonths <= 0) return alert('تاريخ النهاية لازم يكون بعد البداية بشهر على الأقل');
+    if (!rentAmount || rentAmount <= 0) return alert('اكتب قيمة الإيجار');
+    if (!payFrequency) return alert('اختار دورية الدفع');
 
+    setSaving(true);
+
+    // 1) حفظ العقد + رجّع ID
     const { data: contract, error } = await supabase
       .from('contracts')
-      .insert({
-        contract_no: contractNo,
-        property_id: propertyId,
-        tenant_id: tenantId,
-        start_date: startDate,
-        end_date: endDate,
-        duration_months: durationMonths,
-        rent_amount: rentAmount,
-        pay_frequency: payFrequency,
-      })
-      .select()
+      .insert([
+        {
+          contract_no: contractNo.trim(),
+          property_id: propertyId,
+          tenant_id: tenantId,
+          start_date: startDate,
+          end_date: endDate,
+          duration_months: durationMonths,
+          rent_amount: rentAmount,
+          pay_frequency: payFrequency,
+
+          // بيانات العقد
+          contract_type: contractType || null,
+          contract_place: contractPlace || null,
+
+          // بيانات الصك
+          deed_number: deedNumber || null,
+          deed_issue_date: deedIssueDate || null,
+          deed_issue_place: deedIssuePlace || null,
+
+          // بيانات الوحدة
+          unit_type: unitType || null,
+          unit_no: unitNo || null,
+          floor_no: floorNo || null,
+          unit_area: unitArea > 0 ? unitArea : null,
+          has_mezzanine: hasMezzanine,
+          electricity_meter: electricityMeter || null,
+          water_meter: waterMeter || null,
+        },
+      ])
+      .select('id')
       .single();
 
-    if (error) {
-      alert(error.message);
+    if (error || !contract?.id) {
+      setSaving(false);
+      alert(error?.message || 'فشل حفظ العقد');
       return;
     }
 
-    // ===== توليد الاستحقاقات =====
-    let step = 1;
-    if (payFrequency === 'quarterly') step = 3;
-    if (payFrequency === 'yearly') step = 12;
+    // 2) توليد الاستحقاقات
+    const stepMonths =
+      payFrequency === 'monthly' ? 1 : payFrequency === 'quarterly' ? 3 : 12;
 
-    const installments = [];
+    const installments: Array<{
+      contract_id: string;
+      due_date: string;
+      amount: number;
+      status: 'pending';
+    }> = [];
+
     let current = new Date(startDate);
     const end = new Date(endDate);
+    current.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
 
     while (current < end) {
       installments.push({
         contract_id: contract.id,
-        due_date: current.toISOString().slice(0, 10), // ✅ مهم
-        amount: rentAmount * step,
+        due_date: current.toISOString().slice(0, 10), // ✅ لازم string
+        amount: rentAmount * stepMonths,
         status: 'pending',
       });
-
-      current = addMonths(current, step);
+      current.setMonth(current.getMonth() + stepMonths);
     }
 
-    const { error: instError } = await supabase
-      .from('installments')
-      .insert(installments);
+    // 3) حفظ الاستحقاقات
+    if (installments.length > 0) {
+      const { error: instError } = await supabase
+        .from('installments')
+        .insert(installments);
 
-    if (instError) {
-      alert(instError.message);
-      return;
+      if (instError) {
+        setSaving(false);
+        alert('تم حفظ العقد لكن حصل خطأ في توليد الاستحقاقات: ' + instError.message);
+        await loadContracts();
+        return;
+      }
     }
 
+    setSaving(false);
     alert('تم حفظ العقد وتوليد الاستحقاقات ✅');
-    loadAll();
+
+    // reset
+    setContractNo('');
+    setPropertyId(null);
+    setTenantId('');
+    setStartDate('');
+    setEndDate('');
+    setRentAmount(0);
+    setPayFrequency('monthly');
+
+    setContractType('');
+    setContractPlace('');
+
+    setDeedNumber('');
+    setDeedIssueDate('');
+    setDeedIssuePlace('');
+
+    setUnitType('');
+    setUnitNo('');
+    setFloorNo('');
+    setUnitArea(0);
+    setHasMezzanine(false);
+    setElectricityMeter('');
+    setWaterMeter('');
+
+    loadContracts();
   }
 
   /* =======================
@@ -158,41 +307,213 @@ export default function ContractsPage() {
 
   return (
     <AppShell title="العقود">
+      {/* ===== Add Contract ===== */}
       <div className="card dark">
-        <h3>إضافة عقد</h3>
+        <h3 className="card-title">إضافة عقد جديد</h3>
 
-        <input placeholder="رقم العقد" value={contractNo} onChange={e => setContractNo(e.target.value)} />
-        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
-        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+        {/* ===== بيانات العقد ===== */}
+        <h4 style={{ marginTop: 8, marginBottom: 8 }}>بيانات العقد</h4>
+        <div className="form-grid">
+          <div className="form-group">
+            <label>رقم العقد</label>
+            <input
+              placeholder="CNT-2026-01"
+              value={contractNo}
+              onChange={(e) => setContractNo(e.target.value)}
+            />
+          </div>
 
-        <input
-          type="number"
-          placeholder="الإيجار الشهري"
-          value={rentAmount}
-          onChange={e => setRentAmount(+e.target.value)}
-        />
+          <div className="form-group">
+            <label>نوع العقد</label>
+            <select value={contractType} onChange={(e) => setContractType(e.target.value)}>
+              <option value="">اختر</option>
+              <option value="new">جديد</option>
+              <option value="renewal">مجدد</option>
+            </select>
+          </div>
 
-        <select value={payFrequency} onChange={e => setPayFrequency(e.target.value as any)}>
-          <option value="monthly">شهري</option>
-          <option value="quarterly">ربع سنوي</option>
-          <option value="yearly">سنوي</option>
-        </select>
+          <div className="form-group">
+            <label>مكان إبرام العقد</label>
+            <input
+              placeholder="مثال: الرياض"
+              value={contractPlace}
+              onChange={(e) => setContractPlace(e.target.value)}
+            />
+          </div>
 
-        <select value={propertyId} onChange={e => setPropertyId(e.target.value)}>
-          <option value="">العقار</option>
-          {properties.map(p => (
-            <option key={p.id} value={p.id}>{p.code}</option>
-          ))}
-        </select>
+          <div className="form-group">
+            <label>العقار</label>
+            <select value={propertyId ?? ''} onChange={(e) => setPropertyId(e.target.value || null)}>
+              <option value="">اختر العقار</option>
+              {properties.map((p) => (
+                <option key={String(p.id)} value={String(p.id)}>
+                  {p.code}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        <select value={tenantId} onChange={e => setTenantId(e.target.value)}>
-          <option value="">المستأجر</option>
-          {tenants.map(t => (
-            <option key={t.id} value={t.id}>{t.name}</option>
-          ))}
-        </select>
+          <div className="form-group">
+            <label>المستأجر</label>
+            <select value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
+              <option value="">اختر المستأجر</option>
+              {tenants.map((t) => (
+                <option key={String(t.id)} value={String(t.id)}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        <button onClick={addContract}>حفظ</button>
+          <div className="form-group">
+            <label>بداية العقد</label>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          </div>
+
+          <div className="form-group">
+            <label>نهاية العقد</label>
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          </div>
+
+          <div className="form-group">
+            <label>قيمة الإيجار (شهري)</label>
+            <input
+              type="number"
+              min={0}
+              placeholder="10000"
+              value={rentAmount || ''}
+              onChange={(e) => setRentAmount(Number(e.target.value))}
+            />
+          </div>
+
+          <div className="form-group">
+            <label>دورية الدفع</label>
+            <select value={payFrequency} onChange={(e) => setPayFrequency(e.target.value as any)}>
+              <option value="monthly">شهري</option>
+              <option value="quarterly">ربع سنوي</option>
+              <option value="yearly">سنوي</option>
+            </select>
+          </div>
+        </div>
+
+        {/* ===== بيانات الوحدة الإيجارية ===== */}
+        <h4 style={{ marginTop: 18, marginBottom: 8 }}>بيانات الوحدة الإيجارية</h4>
+        <div className="form-grid">
+          <div className="form-group">
+            <label>نوع الوحدة</label>
+            <input value={unitType} onChange={(e) => setUnitType(e.target.value)} placeholder="محل / ورشة ..." />
+          </div>
+
+          <div className="form-group">
+            <label>رقم الوحدة</label>
+            <input value={unitNo} onChange={(e) => setUnitNo(e.target.value)} placeholder="مثال: 497" />
+          </div>
+
+          <div className="form-group">
+            <label>رقم الطابق</label>
+            <input value={floorNo} onChange={(e) => setFloorNo(e.target.value)} placeholder="1" />
+          </div>
+
+          <div className="form-group">
+            <label>مساحة الوحدة</label>
+            <input
+              type="number"
+              min={0}
+              value={unitArea || ''}
+              onChange={(e) => setUnitArea(Number(e.target.value))}
+              placeholder="600"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>عداد الكهرباء</label>
+            <input value={electricityMeter} onChange={(e) => setElectricityMeter(e.target.value)} />
+          </div>
+
+          <div className="form-group">
+            <label>عداد المياه</label>
+            <input value={waterMeter} onChange={(e) => setWaterMeter(e.target.value)} />
+          </div>
+
+          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={hasMezzanine}
+              onChange={(e) => setHasMezzanine(e.target.checked)}
+              id="hasMezzanine"
+            />
+            <label htmlFor="hasMezzanine" style={{ margin: 0 }}>
+              يوجد ميزانين
+            </label>
+          </div>
+        </div>
+
+        {/* ===== بيانات الصك ===== */}
+        <h4 style={{ marginTop: 18, marginBottom: 8 }}>رقم الصك</h4>
+        <div className="form-grid">
+          <div className="form-group">
+            <label>رقم الصك</label>
+            <input value={deedNumber} onChange={(e) => setDeedNumber(e.target.value)} />
+          </div>
+
+          <div className="form-group">
+            <label>تاريخ إصدار الصك</label>
+            <input type="date" value={deedIssueDate} onChange={(e) => setDeedIssueDate(e.target.value)} />
+          </div>
+
+          <div className="form-group">
+            <label>مكان إصدار الصك</label>
+            <input value={deedIssuePlace} onChange={(e) => setDeedIssuePlace(e.target.value)} placeholder="مثال: الرياض" />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+          <button className="primary-btn" onClick={addContract} disabled={saving}>
+            {saving ? 'جاري الحفظ...' : 'حفظ العقد'}
+          </button>
+
+          <span className="muted">
+            المدة المحسوبة: <b>{durationMonths}</b> شهر
+          </span>
+        </div>
+      </div>
+
+      {/* ===== Contracts List ===== */}
+      <div className="card">
+        <h3 className="card-title">قائمة العقود</h3>
+
+        {contracts.length === 0 ? (
+          <p className="muted">لا توجد عقود بعد</p>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>رقم العقد</th>
+                <th>العقار</th>
+                <th>المستأجر</th>
+                <th>بداية</th>
+                <th>نهاية</th>
+                <th>المدة</th>
+                <th>الإيجار</th>
+                <th>الدفع</th>
+              </tr>
+            </thead>
+            <tbody>
+              {contracts.map((c) => (
+                <tr key={c.id}>
+                  <td>{c.contract_no}</td>
+                  <td>{c.properties?.[0]?.code || '-'}</td>
+                  <td>{c.tenants?.[0]?.name || '-'}</td>
+                  <td>{c.start_date}</td>
+                  <td>{c.end_date}</td>
+                  <td>{c.duration_months} شهر</td>
+                  <td>{c.rent_amount}</td>
+                  <td>{c.pay_frequency}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </AppShell>
   );
