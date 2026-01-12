@@ -50,7 +50,11 @@ type ContractRow = {
 /* =======================
    Helpers
 ======================= */
-
+function addMonths(date: Date, months: number) {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
 function calculateDurationMonths(start: string, end: string): number {
   const s = new Date(start);
   const e = new Date(end);
@@ -234,24 +238,15 @@ function generateInstallments(
 
   return installments;
 }
-  async function addContract() {
-    // validations أساسية
-    if (!contractNo.trim()) return alert('اكتب رقم العقد');
-    if (!propertyId) return alert('اختار العقار');
-    if (!tenantId) return alert('اختار المستأجر');
-    if (!startDate) return alert('اختار تاريخ البداية');
-    if (!endDate) return alert('اختار تاريخ النهاية');
-    if (durationMonths <= 0) return alert('تاريخ النهاية لازم يكون بعد البداية بشهر على الأقل');
-    if (!rentAmount || rentAmount <= 0) return alert('اكتب قيمة الإيجار');
-    if (!payFrequency) return alert('اختار دورية الدفع');
+ async function addContract() {
+  if (!contractNo || !propertyId || !tenantId) return;
 
-    setSaving(true);
+  setSaving(true);
 
-    const { data, error } = await supabase
-  .from('contracts')
-  .insert([
-    {
-      contract_no: contractNo.trim(),
+  const { data: contract, error } = await supabase
+    .from('contracts')
+    .insert({
+      contract_no: contractNo,
       property_id: propertyId,
       tenant_id: tenantId,
       start_date: startDate,
@@ -259,29 +254,45 @@ function generateInstallments(
       duration_months: durationMonths,
       rent_amount: rentAmount,
       pay_frequency: payFrequency,
+    })
+    .select()
+    .single();
 
-      contract_type: contractType || null,
-      contract_place: contractPlace || null,
-
-      deed_number: deedNumber || null,
-      deed_issue_date: deedIssueDate || null,
-      deed_issue_place: deedIssuePlace || null,
-
-      unit_type: unitType || null,
-      unit_no: unitNo || null,
-      floor_no: floorNo || null,
-      unit_area: unitArea > 0 ? unitArea : null,
-      has_mezzanine: hasMezzanine,
-      electricity_meter: electricityMeter || null,
-      water_meter: waterMeter || null,
-    },
-  ])
-  .select()
-  .single();
   if (error) {
+    alert(error.message);
+    setSaving(false);
+    return;
+  }
+
+  // =========================
+  // توليد الاستحقاقات
+  // =========================
+  const step =
+    payFrequency === 'monthly'
+      ? 1
+      : payFrequency === 'quarterly'
+      ? 3
+      : 12;
+
+  const installmentsCount = Math.floor(durationMonths / step);
+  const installmentAmount = rentAmount * step;
+
+  const rows = [];
+
+  for (let i = 0; i < installmentsCount; i++) {
+    rows.push({
+      contract_id: contract.id,
+      due_date: addMonths(new Date(startDate), step * (i + 1)),
+      amount: installmentAmount,
+      status: 'pending',
+    });
+  }
+
+  await supabase.from('installments').insert(rows);
+
   setSaving(false);
-  alert(error.message);
-  return;
+  loadContracts();
+  alert('تم حفظ العقد وتوليد الاستحقاقات ✅');
 }
 
 // ⬇️ توليد الاستحقاقات
