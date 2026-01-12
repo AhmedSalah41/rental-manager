@@ -8,16 +8,18 @@ import { supabase } from '@/lib/supabaseClient';
    Types
 ======================= */
 
+type ContractInfo = {
+  contract_no: string;
+  tenants: { name: string }[];
+  properties: { code: string }[];
+};
+
 type InstallmentRow = {
   id: string;
   due_date: string;
   amount: number;
   status: 'pending' | 'paid' | 'late';
-  contracts: {
-    contract_no: string;
-    tenants: { name: string }[];
-    properties: { code: string }[];
-  }[];
+  contracts: ContractInfo[]; // ✅ ARRAY مش object
 };
 
 /* =======================
@@ -51,18 +53,20 @@ export default function PaymentsPage() {
     if (error) {
       console.error('LOAD INSTALLMENTS ERROR:', error);
       setRows([]);
-    } else {
-      const safeRows: InstallmentRow[] = (data || []).map((row: any) => ({
-        id: row.id,
-        due_date: row.due_date,
-        amount: row.amount,
-        status: row.status,
-        contracts: Array.isArray(row.contracts) ? row.contracts : [],
-      }));
-
-      setRows(safeRows);
+      setLoading(false);
+      return;
     }
 
+    // ✅ الحل الحقيقي هنا
+    const safeRows: InstallmentRow[] = (data ?? []).map((r: any) => ({
+      id: String(r.id),
+      due_date: r.due_date,
+      amount: Number(r.amount),
+      status: r.status,
+      contracts: Array.isArray(r.contracts) ? r.contracts : [],
+    }));
+
+    setRows(safeRows); // ✅ مفيش Type error
     setLoading(false);
   }
 
@@ -89,7 +93,7 @@ export default function PaymentsPage() {
             </thead>
             <tbody>
               {rows.map((r) => {
-                const contract = r.contracts[0];
+                const contract = r.contracts[0]; // ✅ أول عقد
 
                 return (
                   <tr key={r.id}>
