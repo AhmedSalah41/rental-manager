@@ -29,30 +29,39 @@ export default function PaymentsPage() {
   }, []);
 
   async function load() {
-    const { data, error } = await supabase
-      .from('installments')
-      .select(`
-        id,
-        due_date,
-        amount,
-        status,
-        contracts (
-          contract_no,
-          tenants ( name ),
-          properties ( code )
-        )
-      `)
-      .order('due_date', { ascending: true });
+  const { data, error } = await supabase
+    .from('installments')
+    .select(`
+      id,
+      due_date,
+      amount,
+      status,
+      contracts (
+        contract_no,
+        tenants ( name ),
+        properties ( code )
+      )
+    `)
+    .order('due_date', { ascending: true });
 
-    if (error) {
-      console.error(error);
-      setRows([]);
-    } else {
-      setRows((data as InstallmentRow[]) || []);
-    }
+  if (error) {
+    console.error(error);
+    setRows([]);
+  } else {
+    const safeRows: InstallmentRow[] =
+      (data || []).map((row: any) => ({
+        id: row.id,
+        due_date: row.due_date,
+        amount: row.amount,
+        status: row.status,
+        contracts: Array.isArray(row.contracts) ? row.contracts : [],
+      }));
 
-    setLoading(false);
+    setRows(safeRows);
   }
+
+  setLoading(false);
+}
 
   return (
     <AppShell title="الاستحقاقات">
