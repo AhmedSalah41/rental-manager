@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
 /* =======================
-   Types (مظبوطة)
+   Types
 ======================= */
 
 type InstallmentRow = {
@@ -20,6 +20,10 @@ type InstallmentRow = {
   }[];
 };
 
+/* =======================
+   Page
+======================= */
+
 export default function PaymentsPage() {
   const [rows, setRows] = useState<InstallmentRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,27 +33,26 @@ export default function PaymentsPage() {
   }, []);
 
   async function load() {
-  const { data, error } = await supabase
-    .from('installments')
-    .select(`
-      id,
-      due_date,
-      amount,
-      status,
-      contracts (
-        contract_no,
-        tenants ( name ),
-        properties ( code )
-      )
-    `)
-    .order('due_date', { ascending: true });
+    const { data, error } = await supabase
+      .from('installments')
+      .select(`
+        id,
+        due_date,
+        amount,
+        status,
+        contracts (
+          contract_no,
+          tenants ( name ),
+          properties ( code )
+        )
+      `)
+      .order('due_date', { ascending: true });
 
-  if (error) {
-    console.error(error);
-    setRows([]);
-  } else {
-    const safeRows: InstallmentRow[] =
-      (data || []).map((row: any) => ({
+    if (error) {
+      console.error('LOAD INSTALLMENTS ERROR:', error);
+      setRows([]);
+    } else {
+      const safeRows: InstallmentRow[] = (data || []).map((row: any) => ({
         id: row.id,
         due_date: row.due_date,
         amount: row.amount,
@@ -57,11 +60,11 @@ export default function PaymentsPage() {
         contracts: Array.isArray(row.contracts) ? row.contracts : [],
       }));
 
-    setRows(safeRows);
-  }
+      setRows(safeRows);
+    }
 
-  setLoading(false);
-}
+    setLoading(false);
+  }
 
   return (
     <AppShell title="الاستحقاقات">
@@ -76,7 +79,7 @@ export default function PaymentsPage() {
           <table className="table">
             <thead>
               <tr>
-                <th>العقد</th>
+                <th>رقم العقد</th>
                 <th>العقار</th>
                 <th>المستأجر</th>
                 <th>تاريخ الاستحقاق</th>
@@ -86,7 +89,7 @@ export default function PaymentsPage() {
             </thead>
             <tbody>
               {rows.map((r) => {
-                const contract = r.contracts?.[0];
+                const contract = r.contracts[0];
 
                 return (
                   <tr key={r.id}>
