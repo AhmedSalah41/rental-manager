@@ -34,7 +34,7 @@ export default function PaymentsPage() {
   /* =====================
      Load Data
   ===================== */
-  const load = async () => {
+  async function load() {
     setLoading(true);
 
     let query = supabase
@@ -56,25 +56,22 @@ export default function PaymentsPage() {
       query = query.eq('status', filter);
     }
 
-    const { data, error } = await query;
+    const { data, error } = await query.returns<InstallmentRow[]>();
 
     if (error) {
       console.error(error);
       setRows([]);
     } else {
-      setRows(data || []);
+      setRows(data ?? []);
     }
 
     setLoading(false);
-  };
+  }
 
   /* =====================
      Helpers
   ===================== */
-  const formatDate = (date: string) =>
-    new Date(date).toLocaleDateString('ar-EG');
-
-  const totalAmount = rows.reduce((sum, r) => sum + r.amount, 0);
+  const totalAmount = rows.reduce((s, r) => s + r.amount, 0);
   const paidCount = rows.filter((r) => r.status === 'paid').length;
   const pendingCount = rows.filter((r) => r.status === 'pending').length;
 
@@ -85,14 +82,7 @@ export default function PaymentsPage() {
     <AppShell title="الاستحقاقات">
       {/* ===== Stats ===== */}
       <div className="content-card">
-        <div
-          className="card-body"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: 16,
-          }}
-        >
+        <div className="card-body" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16 }}>
           <Stat label="إجمالي الاستحقاقات" value={rows.length} />
           <Stat label="مدفوع" value={paidCount} />
           <Stat label="قادم" value={pendingCount} />
@@ -103,28 +93,9 @@ export default function PaymentsPage() {
       {/* ===== Filters ===== */}
       <div className="content-card">
         <div className="card-body" style={{ display: 'flex', gap: 10 }}>
-          <button
-            className={`btn ${filter === 'all' ? 'btn-primary' : 'btn-outline'}`}
-            onClick={() => setFilter('all')}
-          >
-            الكل
-          </button>
-          <button
-            className={`btn ${
-              filter === 'pending' ? 'btn-primary' : 'btn-outline'
-            }`}
-            onClick={() => setFilter('pending')}
-          >
-            قادم
-          </button>
-          <button
-            className={`btn ${
-              filter === 'paid' ? 'btn-primary' : 'btn-outline'
-            }`}
-            onClick={() => setFilter('paid')}
-          >
-            مدفوع
-          </button>
+          <button className={`btn ${filter === 'all' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setFilter('all')}>الكل</button>
+          <button className={`btn ${filter === 'pending' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setFilter('pending')}>قادم</button>
+          <button className={`btn ${filter === 'paid' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setFilter('paid')}>مدفوع</button>
         </div>
       </div>
 
@@ -139,7 +110,7 @@ export default function PaymentsPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>رقم العقد</th>
+                  <th>العقد</th>
                   <th>العقار</th>
                   <th>المستأجر</th>
                   <th>تاريخ الاستحقاق</th>
@@ -156,15 +127,11 @@ export default function PaymentsPage() {
                       <td>{contract?.contract_no || '-'}</td>
                       <td>{contract?.properties?.[0]?.code || '-'}</td>
                       <td>{contract?.tenants?.[0]?.name || '-'}</td>
-                      <td>{formatDate(r.due_date)}</td>
+                      <td>{r.due_date}</td>
                       <td>{r.amount.toLocaleString()}</td>
                       <td>
-                        {r.status === 'paid' && (
-                          <span className="badge badge-success">مدفوع</span>
-                        )}
-                        {r.status === 'pending' && (
-                          <span className="badge badge-warning">قادم</span>
-                        )}
+                        {r.status === 'paid' && <span className="badge badge-success">مدفوع</span>}
+                        {r.status === 'pending' && <span className="badge badge-warning">قادم</span>}
                       </td>
                     </tr>
                   );
