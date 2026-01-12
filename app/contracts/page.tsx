@@ -269,7 +269,29 @@ export default function ContractsPage() {
 
   loadContracts();
 }
+// بعد حفظ العقد
+console.log('CONTRACT ID:', contract.id);
 
+const installments = buildInstallments(
+  contract.id,
+  startDate,
+  endDate,
+  payFrequency,
+  rentAmount
+);
+
+console.log('INSTALLMENTS TO INSERT:', installments);
+
+const { error: instError } = await supabase
+  .from('installments')
+  .insert(installments);
+
+if (instError) {
+  console.error('INSTALLMENTS ERROR:', instError);
+  alert('حصل خطأ في توليد الاستحقاقات');
+} else {
+  console.log('INSTALLMENTS INSERTED SUCCESS');
+}
   /* =======================
      UI
   ======================= */
