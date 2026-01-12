@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
 /* =====================
-   Types (بعد التطبيع)
+   Types
 ===================== */
 type PaymentRow = {
   id: string;
@@ -30,7 +30,7 @@ export default function PaymentsPage() {
   }, []);
 
   /* =====================
-     Load Payments
+     Load Payments (FIXED)
   ===================== */
   async function loadPayments() {
     setLoading(true);
@@ -42,10 +42,10 @@ export default function PaymentsPage() {
         due_date,
         amount,
         status,
-        contracts (
+        contracts:contract_id (
           contract_no,
-          tenants ( name ),
-          properties ( code )
+          tenants:tenant_id ( name ),
+          properties:property_id ( code )
         )
       `)
       .order('due_date', { ascending: true });
@@ -57,38 +57,29 @@ export default function PaymentsPage() {
       return;
     }
 
-    // ✅ تطبيع الداتا (حل نهائي للمشكلة)
-    const normalized: PaymentRow[] = (data ?? []).map((row: any) => {
-      const contract = row.contracts?.[0];
-
-      return {
-        id: row.id,
-        due_date: row.due_date,
-        amount: row.amount,
-        status: row.status,
-        contract_no: contract?.contract_no || '-',
-        tenant_name: contract?.tenants?.[0]?.name || '-',
-        property_code: contract?.properties?.[0]?.code || '-',
-      };
-    });
+    // ✅ تطبيع صحيح (OBJECT مش ARRAY)
+    const normalized: PaymentRow[] = (data ?? []).map((row: any) => ({
+      id: row.id,
+      due_date: row.due_date,
+      amount: row.amount,
+      status: row.status,
+      contract_no: row.contracts?.contract_no ?? '-',
+      tenant_name: row.contracts?.tenants?.name ?? '-',
+      property_code: row.contracts?.properties?.code ?? '-',
+    }));
 
     setRows(normalized);
     setLoading(false);
   }
 
   /* =====================
-     Pay Installment
+     Pay
   ===================== */
   async function markAsPaid(id: string) {
-    const { error } = await supabase
+    await supabase
       .from('installments')
       .update({ status: 'paid' })
       .eq('id', id);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
 
     loadPayments();
   }
@@ -101,58 +92,44 @@ export default function PaymentsPage() {
     return rows.filter((r) => r.status === filter);
   }, [rows, filter]);
 
-  const totalAmount = useMemo(
-    () => rows.reduce((sum, r) => sum + r.amount, 0),
+  const total = useMemo(
+    () => rows.reduce((s, r) => s + r.amount, 0),
     [rows]
   );
 
-  const paidAmount = useMemo(
+  const paid = useMemo(
     () => rows.filter(r => r.status === 'paid').reduce((s, r) => s + r.amount, 0),
     [rows]
   );
 
-  const remainingAmount = totalAmount - paidAmount;
+  const remaining = total - paid;
 
   /* =====================
      UI
   ===================== */
   return (
     <AppShell title="الاستحقاقات">
-      {/* ===== Summary ===== */}
+      {/* Summary */}
       <div className="content-card">
         <div className="card-body" style={{ display: 'flex', gap: 24 }}>
-          <div>
-            <strong>الإجمالي:</strong> {totalAmount.toLocaleString()}
-          </div>
-          <div>
-            <strong>المدفوع:</strong> {paidAmount.toLocaleString()}
-          </div>
-          <div>
-            <strong>المتبقي:</strong> {remainingAmount.toLocaleString()}
-          </div>
+          <div>الإجمالي: <b>{total.toLocaleString()}</b></div>
+          <div>المدفوع: <b>{paid.toLocaleString()}</b></div>
+          <div>المتبقي: <b>{remaining.toLocaleString()}</b></div>
         </div>
       </div>
 
-      {/* ===== Filters ===== */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-        <button className="btn btn-outline" onClick={() => setFilter('all')}>
-          الكل
-        </button>
-        <button className="btn btn-outline" onClick={() => setFilter('pending')}>
-          القادمة
-        </button>
-        <button className="btn btn-outline" onClick={() => setFilter('paid')}>
-          المدفوعة
-        </button>
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+        <button className="btn btn-outline" onClick={() => setFilter('all')}>الكل</button>
+        <button className="btn btn-outline" onClick={() => setFilter('pending')}>القادمة</button>
+        <button className="btn btn-outline" onClick={() => setFilter('paid')}>المدفوعة</button>
       </div>
 
-      {/* ===== Table ===== */}
+      {/* Table */}
       <div className="content-card">
         <div className="card-body">
           {loading ? (
-            <p className="muted">جاري التحميل...</p>
-          ) : filteredRows.length === 0 ? (
-            <p className="muted">لا توجد بيانات</p>
+            <p>جاري التحميل...</p>
           ) : (
             <table className="data-table">
               <thead>
@@ -160,14 +137,14 @@ export default function PaymentsPage() {
                   <th>العقد</th>
                   <th>العقار</th>
                   <th>المستأجر</th>
-                  <th>تاريخ الاستحقاق</th>
+                  <th>التاريخ</th>
                   <th>المبلغ</th>
                   <th>الحالة</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((r) => (
+                {filteredRows.map(r => (
                   <tr key={r.id}>
                     <td>{r.contract_no}</td>
                     <td>{r.property_code}</td>
@@ -175,18 +152,13 @@ export default function PaymentsPage() {
                     <td>{r.due_date}</td>
                     <td>{r.amount.toLocaleString()}</td>
                     <td>
-                      {r.status === 'paid' ? (
-                        <span className="badge badge-success">مدفوع</span>
-                      ) : (
-                        <span className="badge badge-warning">قادم</span>
-                      )}
+                      {r.status === 'paid'
+                        ? <span className="badge badge-success">مدفوع</span>
+                        : <span className="badge badge-warning">قادم</span>}
                     </td>
                     <td>
                       {r.status === 'pending' && (
-                        <button
-                          className="btn btn-primary"
-                          onClick={() => markAsPaid(r.id)}
-                        >
+                        <button className="btn btn-primary" onClick={() => markAsPaid(r.id)}>
                           دفع
                         </button>
                       )}
