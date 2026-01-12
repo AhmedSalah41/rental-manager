@@ -6,12 +6,16 @@ import Sidebar from './Sidebar';
 import { supabase } from '../lib/supabaseClient';
 import { usePathname, useRouter } from 'next/navigation';
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+type AppShellProps = {
+  title?: string;
+  children: React.ReactNode;
+};
+
+export default function AppShell({ title, children }: AppShellProps) {
   const [showMobile, setShowMobile] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
-  // حماية بسيطة: أي صفحة غير /login لازم يكون في session
   useEffect(() => {
     const check = async () => {
       if (pathname === '/login') return;
@@ -32,6 +36,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <Sidebar showMobile={showMobile} />
 
       <main className="main-content" id="mainContent">
+        {title && <h1 className="page-title">{title}</h1>}
         {children}
       </main>
     </>

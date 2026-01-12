@@ -26,8 +26,8 @@ type ContractRow = {
   duration_months: number;
   rent_amount: number;
   pay_frequency: string;
-  properties: { code: string } | null;
-  tenants: { name: string } | null;
+  properties: { code: string }[]; // 👈 ARRAY
+  tenants: { name: string }[];    // 👈 ARRAY
 };
 
 /* =======================
@@ -105,24 +105,27 @@ export default function ContractsPage() {
     if (!error) setTenants(data || []);
   }
 
-  async function loadContracts() {
-    const { data, error } = await supabase
-      .from('contracts')
-      .select(`
-        id,
-        contract_no,
-        start_date,
-        end_date,
-        duration_months,
-        rent_amount,
-        pay_frequency,
-        properties ( code ),
-        tenants ( name )
-      `)
-      .order('created_at', { ascending: false });
+async function loadContracts() {
+  const { data, error } = await supabase
+    .from('contracts')
+    .select(`
+      id,
+      contract_no,
+      start_date,
+      end_date,
+      duration_months,
+      rent_amount,
+      pay_frequency,
+      properties ( code ),
+      tenants ( name )
+    `)
+    .returns<ContractRow[]>()
+    .order('created_at', { ascending: false });
 
-    if (!error) setContracts(data || []);
+  if (!error) {
+    setContracts(data ?? []);
   }
+}
 
   /* =======================
      Add Contract
@@ -307,8 +310,8 @@ export default function ContractsPage() {
               {contracts.map((c) => (
                 <tr key={c.id}>
                   <td>{c.contract_no}</td>
-                  <td>{c.properties?.code || '-'}</td>
-                  <td>{c.tenants?.name || '-'}</td>
+                  <td>{c.properties[0]?.code || '-'}</td>
+                  <td>{c.tenants[0]?.name || '-'}</td>
                   <td>{c.start_date}</td>
                   <td>{c.end_date}</td>
                   <td>{c.duration_months} شهر</td>
