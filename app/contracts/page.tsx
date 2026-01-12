@@ -216,15 +216,15 @@ export default function ContractsPage() {
      Add Contract + Generate Installments
   ======================= */
 
-  async function addContract() {
+ async function addContract() {
   if (!contractNo || !propertyId || !tenantId) {
-    alert('بيانات العقد ناقصة');
+    alert('كمّل البيانات الأساسية');
     return;
   }
 
   setSaving(true);
 
-  // 1️⃣ حفظ العقد
+  // 1️⃣ إضافة العقد
   const { data: contract, error } = await supabase
     .from('contracts')
     .insert({
@@ -240,34 +240,56 @@ export default function ContractsPage() {
     .select()
     .single();
 
-  if (error || !contract) {
-    alert(error?.message || 'خطأ في حفظ العقد');
+  if (error) {
+    alert(error.message);
     setSaving(false);
     return;
   }
 
   // 2️⃣ توليد الاستحقاقات
-  const installments = buildInstallments(
-    contract.id,
-    startDate,
-    endDate,
-    payFrequency,
-    rentAmount
-  );
+  let stepMonths = 1;
+  if (payFrequency === 'quarterly') stepMonths = 3;
+  if (payFrequency === 'yearly') stepMonths = 12;
 
+  const installments = [];
+  let current = new Date(startDate);
+  const end = new Date(endDate);
+
+  while (current < end) {
+    installments.push({
+      contract_id: contract.id,
+      due_date: current.toISOString().slice(0, 10), // ✅ مهم
+      amount: rentAmount * stepMonths,
+      status: 'pending',
+    });
+
+    current.setMonth(current.getMonth() + stepMonths);
+  }
+
+  // 3️⃣ حفظ الاستحقاقات
   if (installments.length > 0) {
     const { error: instError } = await supabase
       .from('installments')
       .insert(installments);
 
     if (instError) {
-      alert('خطأ في توليد الاستحقاقات');
-      console.error(instError);
+      alert('خطأ في توليد الاستحقاقات: ' + instError.message);
+      setSaving(false);
+      return;
     }
   }
 
   setSaving(false);
   alert('تم حفظ العقد وتوليد الاستحقاقات ✅');
+
+  // reset
+  setContractNo('');
+  setPropertyId(null);
+  setTenantId('');
+  setStartDate('');
+  setEndDate('');
+  setRentAmount(0);
+  setPayFrequency('monthly');
 
   loadContracts();
 }
