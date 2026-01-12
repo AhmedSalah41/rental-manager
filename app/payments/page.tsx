@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
 /* =======================
-   Types
+   Types (مظبوطة)
 ======================= */
 
 type InstallmentRow = {
@@ -15,14 +15,10 @@ type InstallmentRow = {
   status: 'pending' | 'paid' | 'late';
   contracts: {
     contract_no: string;
-    tenants: { name: string }[];     // ✅ ARRAY
-    properties: { code: string }[];  // ✅ ARRAY
-  };
+    tenants: { name: string }[];
+    properties: { code: string }[];
+  }[];
 };
-
-/* =======================
-   Page
-======================= */
 
 export default function PaymentsPage() {
   const [rows, setRows] = useState<InstallmentRow[]>([]);
@@ -33,8 +29,6 @@ export default function PaymentsPage() {
   }, []);
 
   async function load() {
-    setLoading(true);
-
     const { data, error } = await supabase
       .from('installments')
       .select(`
@@ -54,7 +48,7 @@ export default function PaymentsPage() {
       console.error(error);
       setRows([]);
     } else {
-      setRows(data || []);
+      setRows((data as InstallmentRow[]) || []);
     }
 
     setLoading(false);
@@ -82,26 +76,30 @@ export default function PaymentsPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td>{r.contracts?.contract_no || '-'}</td>
-                  <td>{r.contracts?.properties?.[0]?.code || '-'}</td>
-                  <td>{r.contracts?.tenants?.[0]?.name || '-'}</td>
-                  <td>{r.due_date}</td>
-                  <td>{r.amount}</td>
-                  <td>
-                    {r.status === 'pending' && (
-                      <span className="badge warning">قادم</span>
-                    )}
-                    {r.status === 'paid' && (
-                      <span className="badge success">مدفوع</span>
-                    )}
-                    {r.status === 'late' && (
-                      <span className="badge danger">متأخر</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {rows.map((r) => {
+                const contract = r.contracts?.[0];
+
+                return (
+                  <tr key={r.id}>
+                    <td>{contract?.contract_no || '-'}</td>
+                    <td>{contract?.properties?.[0]?.code || '-'}</td>
+                    <td>{contract?.tenants?.[0]?.name || '-'}</td>
+                    <td>{r.due_date}</td>
+                    <td>{r.amount}</td>
+                    <td>
+                      {r.status === 'pending' && (
+                        <span className="badge warning">قادم</span>
+                      )}
+                      {r.status === 'paid' && (
+                        <span className="badge success">مدفوع</span>
+                      )}
+                      {r.status === 'late' && (
+                        <span className="badge danger">متأخر</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
