@@ -67,48 +67,31 @@ function calculateDurationMonths(start: string, end: string): number {
  *
  * status هنخليه pending (والصفحة بتاعت الاستحقاقات هتحسب متأخر/قادم حسب التاريخ)
  */
-function buildInstallments(params: {
-  contractId: string;
-  startDate: string;
-  endDate: string;
-  payFrequency: 'monthly' | 'quarterly' | 'yearly';
-  rentAmount: number;
-}) {
-  const { contractId, startDate, endDate, payFrequency, rentAmount } = params;
+function buildInstallments(
+  contractId: string,
+  start: string,
+  end: string,
+  frequency: 'monthly' | 'quarterly' | 'yearly',
+  rentAmount: number
+) {
+  const rows = [];
 
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  let step = 1;
+  if (frequency === 'quarterly') step = 3;
+  if (frequency === 'yearly') step = 12;
 
-  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) return [];
+  let current = new Date(start);
+  const endDate = new Date(end);
 
-  const step =
-    payFrequency === 'monthly' ? 1 : payFrequency === 'quarterly' ? 3 : 12;
-
-  const amountPerInstallment = rentAmount * step;
-
-  const rows: Array<{
-    contract_id: string;
-    due_date: string;
-    amount: number;
-    status: 'pending';
-  }> = [];
-
-  // نخلي أول استحقاق بعد بداية العقد بـ step
-  const current = new Date(start);
-  current.setHours(0, 0, 0, 0);
-  end.setHours(0, 0, 0, 0);
-
-  while (true) {
-    current.setMonth(current.getMonth() + step);
-
-    if (current > end) break;
-
+  while (current < endDate) {
     rows.push({
       contract_id: contractId,
-      due_date: current.toISOString().slice(0, 10), // YYYY-MM-DD
-      amount: amountPerInstallment,
+      due_date: current.toISOString().slice(0, 10),
+      amount: rentAmount * step,
       status: 'pending',
     });
+
+    current.setMonth(current.getMonth() + step);
   }
 
   return rows;
@@ -232,113 +215,60 @@ export default function ContractsPage() {
   ======================= */
 
   async function addContract() {
-    // validations أساسية
-    if (!contractNo.trim()) return alert('اكتب رقم العقد');
-    if (!propertyId) return alert('اختار العقار');
-    if (!tenantId) return alert('اختار المستأجر');
-    if (!startDate) return alert('اختار تاريخ البداية');
-    if (!endDate) return alert('اختار تاريخ النهاية');
-    if (durationMonths <= 0) return alert('تاريخ النهاية لازم يكون بعد البداية بشهر على الأقل');
-    if (!rentAmount || rentAmount <= 0) return alert('اكتب قيمة الإيجار');
-    if (!payFrequency) return alert('اختار دورية الدفع');
-
-    setSaving(true);
-
-    // 1) حفظ العقد + جلب الـ id
-    const { data: contract, error } = await supabase
-      .from('contracts')
-      .insert([
-        {
-          contract_no: contractNo.trim(),
-          property_id: propertyId,
-          tenant_id: tenantId,
-          start_date: startDate,
-          end_date: endDate,
-          duration_months: durationMonths,
-          rent_amount: rentAmount,
-          pay_frequency: payFrequency,
-
-          // بيانات العقد
-          contract_type: contractType || null,
-          contract_place: contractPlace || null,
-
-          // بيانات الصك
-          deed_number: deedNumber || null,
-          deed_issue_date: deedIssueDate || null,
-          deed_issue_place: deedIssuePlace || null,
-
-          // بيانات الوحدة
-          unit_type: unitType || null,
-          unit_no: unitNo || null,
-          floor_no: floorNo || null,
-          unit_area: unitArea > 0 ? unitArea : null,
-          has_mezzanine: hasMezzanine,
-          electricity_meter: electricityMeter || null,
-          water_meter: waterMeter || null,
-        },
-      ])
-      .select('id')
-      .single();
-
-    if (error || !contract?.id) {
-      setSaving(false);
-      alert(error?.message || 'حصل خطأ أثناء حفظ العقد');
-      return;
-    }
-
-    // 2) توليد الاستحقاقات + إدخالها في installments
-    const installments = buildInstallments({
-      contractId: contract.id,
-      startDate,
-      endDate,
-      payFrequency,
-      rentAmount,
-    });
-
-    if (installments.length > 0) {
-      const { error: instError } = await supabase
-        .from('installments')
-        .insert(installments);
-
-      if (instError) {
-        setSaving(false);
-        alert('تم حفظ العقد لكن حصل خطأ في توليد الاستحقاقات: ' + instError.message);
-        // نسيب العقد محفوظ، ونقدر بعدين نعمل زر "إعادة توليد"
-        await loadContracts();
-        return;
-      }
-    }
-
-    setSaving(false);
-
-    // reset
-    setContractNo('');
-    setPropertyId(null);
-    setTenantId('');
-    setStartDate('');
-    setEndDate('');
-    setRentAmount(0);
-    setPayFrequency('monthly');
-
-    setContractType('');
-    setContractPlace('');
-
-    setDeedNumber('');
-    setDeedIssueDate('');
-    setDeedIssuePlace('');
-
-    setUnitType('');
-    setUnitNo('');
-    setFloorNo('');
-    setUnitArea(0);
-    setHasMezzanine(false);
-    setElectricityMeter('');
-    setWaterMeter('');
-
-    await loadContracts();
-
-    alert('تم حفظ العقد وتوليد الاستحقاقات ✅');
+  if (!contractNo || !propertyId || !tenantId) {
+    alert('بيانات العقد ناقصة');
+    return;
   }
+
+  setSaving(true);
+
+  // 1️⃣ حفظ العقد
+  const { data: contract, error } = await supabase
+    .from('contracts')
+    .insert({
+      contract_no: contractNo,
+      property_id: propertyId,
+      tenant_id: tenantId,
+      start_date: startDate,
+      end_date: endDate,
+      duration_months: durationMonths,
+      rent_amount: rentAmount,
+      pay_frequency: payFrequency,
+    })
+    .select()
+    .single();
+
+  if (error || !contract) {
+    alert(error?.message || 'خطأ في حفظ العقد');
+    setSaving(false);
+    return;
+  }
+
+  // 2️⃣ توليد الاستحقاقات
+  const installments = buildInstallments(
+    contract.id,
+    startDate,
+    endDate,
+    payFrequency,
+    rentAmount
+  );
+
+  if (installments.length > 0) {
+    const { error: instError } = await supabase
+      .from('installments')
+      .insert(installments);
+
+    if (instError) {
+      alert('خطأ في توليد الاستحقاقات');
+      console.error(instError);
+    }
+  }
+
+  setSaving(false);
+  alert('تم حفظ العقد وتوليد الاستحقاقات ✅');
+
+  loadContracts();
+}
 
   /* =======================
      UI
