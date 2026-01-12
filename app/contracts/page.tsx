@@ -206,7 +206,34 @@ async function generateInstallments(contractId: string) {
   /* =======================
      Add Contract
   ======================= */
+function generateInstallments(
+  contractId: string,
+  start: string,
+  end: string,
+  frequency: 'monthly' | 'quarterly' | 'yearly',
+  amount: number
+) {
+  const installments = [];
+  let current = new Date(start);
+  const endDate = new Date(end);
 
+  let stepMonths = 1;
+  if (frequency === 'quarterly') stepMonths = 3;
+  if (frequency === 'yearly') stepMonths = 12;
+
+  while (current < endDate) {
+    installments.push({
+      contract_id: contractId,
+      due_date: current.toISOString().slice(0, 10),
+      amount,
+      status: 'pending',
+    });
+
+    current.setMonth(current.getMonth() + stepMonths);
+  }
+
+  return installments;
+}
   async function addContract() {
     // validations أساسية
     if (!contractNo.trim()) return alert('اكتب رقم العقد');
@@ -251,10 +278,22 @@ async function generateInstallments(contractId: string) {
   ])
   .select()
   .single();
-  if (data?.id) {
-  await generateInstallments(data.id);
+  if (error) {
+  setSaving(false);
+  alert(error.message);
+  return;
 }
 
+// ⬇️ توليد الاستحقاقات
+const installments = generateInstallments(
+  data.id,
+  startDate,
+  endDate,
+  payFrequency,
+  rentAmount
+);
+
+await supabase.from('installments').insert(installments);
     setSaving(false);
 
     if (error) {
