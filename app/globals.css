@@ -286,3 +286,50 @@ table tbody tr:hover{
   .sidebar{transform:translateX(260px)}
   .sidebar.show{transform:translateX(0)}
 }
+/* ===== Stats ===== */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: #fff;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: var(--box-shadow);
+}
+
+.stat-card span {
+  color: var(--gray-color);
+  font-size: 14px;
+}
+
+.stat-card strong {
+  font-size: 22px;
+}
+
+.stat-card.success strong { color: var(--success-color); }
+.stat-card.warning strong { color: var(--warning-color); }
+
+/* ===== Filters ===== */
+.filters {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.filters button {
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid #ddd;
+  background: #fff;
+  cursor: pointer;
+}
+
+.filters button.active {
+  background: var(--primary-color);
+  color: #fff;
+  border-color: var(--primary-color);
+}
