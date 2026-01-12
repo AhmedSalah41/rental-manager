@@ -26,8 +26,24 @@ type ContractRow = {
   duration_months: number;
   rent_amount: number;
   pay_frequency: string;
-  properties: { code: string }[]; // 👈 ARRAY
-  tenants: { name: string }[];    // 👈 ARRAY
+
+  contract_type?: string;
+  contract_place?: string;
+
+  deed_number?: string;
+  deed_issue_date?: string; // date comes as string
+  deed_issue_place?: string;
+
+  unit_type?: string;
+  unit_no?: string;
+  floor_no?: string;
+  unit_area?: number;
+  has_mezzanine?: boolean;
+  electricity_meter?: string;
+  water_meter?: string;
+
+  properties: { code: string }[];
+  tenants: { name: string }[];
 };
 
 /* =======================
@@ -40,10 +56,7 @@ function calculateDurationMonths(start: string, end: string): number {
 
   if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) return 0;
 
-  return (
-    (e.getFullYear() - s.getFullYear()) * 12 +
-    (e.getMonth() - s.getMonth())
-  );
+  return (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth());
 }
 
 /* =======================
@@ -55,6 +68,7 @@ export default function ContractsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [contracts, setContracts] = useState<ContractRow[]>([]);
 
+  // ===== بيانات أساسية =====
   const [contractNo, setContractNo] = useState('');
   const [propertyId, setPropertyId] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState('');
@@ -63,6 +77,24 @@ export default function ContractsPage() {
   const [rentAmount, setRentAmount] = useState<number>(0);
   const [payFrequency, setPayFrequency] =
     useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
+
+  // ===== بيانات العقد (إضافية) =====
+  const [contractType, setContractType] = useState(''); // جديد / مجدد
+  const [contractPlace, setContractPlace] = useState(''); // مكان ابرام العقد
+
+  // ===== بيانات الصك =====
+  const [deedNumber, setDeedNumber] = useState('');
+  const [deedIssueDate, setDeedIssueDate] = useState('');
+  const [deedIssuePlace, setDeedIssuePlace] = useState('');
+
+  // ===== بيانات الوحدة الإيجارية =====
+  const [unitType, setUnitType] = useState('');
+  const [unitNo, setUnitNo] = useState('');
+  const [floorNo, setFloorNo] = useState('');
+  const [unitArea, setUnitArea] = useState<number>(0);
+  const [hasMezzanine, setHasMezzanine] = useState(false);
+  const [electricityMeter, setElectricityMeter] = useState('');
+  const [waterMeter, setWaterMeter] = useState('');
 
   const [saving, setSaving] = useState(false);
 
@@ -80,11 +112,7 @@ export default function ContractsPage() {
   }, []);
 
   async function loadAll() {
-    await Promise.all([
-      loadProperties(),
-      loadTenants(),
-      loadContracts(),
-    ]);
+    await Promise.all([loadProperties(), loadTenants(), loadContracts()]);
   }
 
   async function loadProperties() {
@@ -105,42 +133,57 @@ export default function ContractsPage() {
     if (!error) setTenants(data || []);
   }
 
-async function loadContracts() {
-  const { data, error } = await supabase
-    .from('contracts')
-    .select(`
-      id,
-      contract_no,
-      start_date,
-      end_date,
-      duration_months,
-      rent_amount,
-      pay_frequency,
-      properties ( code ),
-      tenants ( name )
-    `)
-    .returns<ContractRow[]>()
-    .order('created_at', { ascending: false });
+  async function loadContracts() {
+    const { data, error } = await supabase
+      .from('contracts')
+      .select(
+        `
+        id,
+        contract_no,
+        start_date,
+        end_date,
+        duration_months,
+        rent_amount,
+        pay_frequency,
 
-  if (!error) {
-    setContracts(data ?? []);
+        contract_type,
+        contract_place,
+
+        deed_number,
+        deed_issue_date,
+        deed_issue_place,
+
+        unit_type,
+        unit_no,
+        floor_no,
+        unit_area,
+        has_mezzanine,
+        electricity_meter,
+        water_meter,
+
+        properties ( code ),
+        tenants ( name )
+      `
+      )
+      .returns<ContractRow[]>()
+      .order('created_at', { ascending: false });
+
+    if (!error) setContracts(data ?? []);
   }
-}
 
   /* =======================
      Add Contract
   ======================= */
 
   async function addContract() {
+    // validations أساسية
     if (!contractNo.trim()) return alert('اكتب رقم العقد');
     if (!propertyId) return alert('اختار العقار');
     if (!tenantId) return alert('اختار المستأجر');
     if (!startDate) return alert('اختار تاريخ البداية');
     if (!endDate) return alert('اختار تاريخ النهاية');
-    if (durationMonths <= 0)
-      return alert('تاريخ النهاية لازم يكون بعد البداية بشهر على الأقل');
-    if (!rentAmount || rentAmount <= 0)
-      return alert('اكتب قيمة الإيجار');
+    if (durationMonths <= 0) return alert('تاريخ النهاية لازم يكون بعد البداية بشهر على الأقل');
+    if (!rentAmount || rentAmount <= 0) return alert('اكتب قيمة الإيجار');
     if (!payFrequency) return alert('اختار دورية الدفع');
 
     setSaving(true);
@@ -155,6 +198,24 @@ async function loadContracts() {
         duration_months: durationMonths,
         rent_amount: rentAmount,
         pay_frequency: payFrequency,
+
+        // بيانات العقد
+        contract_type: contractType || null,
+        contract_place: contractPlace || null,
+
+        // بيانات الصك
+        deed_number: deedNumber || null,
+        deed_issue_date: deedIssueDate || null,
+        deed_issue_place: deedIssuePlace || null,
+
+        // بيانات الوحدة
+        unit_type: unitType || null,
+        unit_no: unitNo || null,
+        floor_no: floorNo || null,
+        unit_area: unitArea > 0 ? unitArea : null,
+        has_mezzanine: hasMezzanine,
+        electricity_meter: electricityMeter || null,
+        water_meter: waterMeter || null,
       },
     ]);
 
@@ -167,12 +228,27 @@ async function loadContracts() {
 
     // reset
     setContractNo('');
-    setPropertyId('');
+    setPropertyId(null); // ✅ مهم
     setTenantId('');
     setStartDate('');
     setEndDate('');
     setRentAmount(0);
     setPayFrequency('monthly');
+
+    setContractType('');
+    setContractPlace('');
+
+    setDeedNumber('');
+    setDeedIssueDate('');
+    setDeedIssuePlace('');
+
+    setUnitType('');
+    setUnitNo('');
+    setFloorNo('');
+    setUnitArea(0);
+    setHasMezzanine(false);
+    setElectricityMeter('');
+    setWaterMeter('');
 
     loadContracts();
   }
@@ -187,6 +263,8 @@ async function loadContracts() {
       <div className="card dark">
         <h3 className="card-title">إضافة عقد جديد</h3>
 
+        {/* ===== بيانات العقد ===== */}
+        <h4 style={{ marginTop: 8, marginBottom: 8 }}>بيانات العقد</h4>
         <div className="form-grid">
           <div className="form-group">
             <label>رقم العقد</label>
@@ -198,8 +276,26 @@ async function loadContracts() {
           </div>
 
           <div className="form-group">
+            <label>نوع العقد</label>
+            <select value={contractType} onChange={(e) => setContractType(e.target.value)}>
+              <option value="">اختر</option>
+              <option value="new">جديد</option>
+              <option value="renewal">مجدد</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>مكان إبرام العقد</label>
+            <input
+              placeholder="مثال: الرياض"
+              value={contractPlace}
+              onChange={(e) => setContractPlace(e.target.value)}
+            />
+          </div>
+
+          <div className="form-group">
             <label>العقار</label>
-           <select
+            <select
               value={propertyId ?? ''}
               onChange={(e) => setPropertyId(e.target.value || null)}
             >
@@ -214,10 +310,7 @@ async function loadContracts() {
 
           <div className="form-group">
             <label>المستأجر</label>
-            <select
-              value={tenantId}
-              onChange={(e) => setTenantId(e.target.value)}
-            >
+            <select value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
               <option value="">اختر المستأجر</option>
               {tenants.map((t) => (
                 <option key={String(t.id)} value={String(t.id)}>
@@ -229,20 +322,12 @@ async function loadContracts() {
 
           <div className="form-group">
             <label>بداية العقد</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-            />
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           </div>
 
           <div className="form-group">
             <label>نهاية العقد</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-            />
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
 
           <div className="form-group">
@@ -258,12 +343,7 @@ async function loadContracts() {
 
           <div className="form-group">
             <label>دورية الدفع</label>
-            <select
-              value={payFrequency}
-              onChange={(e) =>
-                setPayFrequency(e.target.value as any)
-              }
-            >
+            <select value={payFrequency} onChange={(e) => setPayFrequency(e.target.value as any)}>
               <option value="monthly">شهري</option>
               <option value="quarterly">ربع سنوي</option>
               <option value="yearly">سنوي</option>
@@ -271,12 +351,79 @@ async function loadContracts() {
           </div>
         </div>
 
+        {/* ===== بيانات الوحدة الإيجارية ===== */}
+        <h4 style={{ marginTop: 18, marginBottom: 8 }}>بيانات الوحدة الإيجارية</h4>
+        <div className="form-grid">
+          <div className="form-group">
+            <label>نوع الوحدة</label>
+            <input value={unitType} onChange={(e) => setUnitType(e.target.value)} placeholder="محل / ورشة ..." />
+          </div>
+
+          <div className="form-group">
+            <label>رقم الوحدة</label>
+            <input value={unitNo} onChange={(e) => setUnitNo(e.target.value)} placeholder="مثال: 497" />
+          </div>
+
+          <div className="form-group">
+            <label>رقم الطابق</label>
+            <input value={floorNo} onChange={(e) => setFloorNo(e.target.value)} placeholder="1" />
+          </div>
+
+          <div className="form-group">
+            <label>مساحة الوحدة</label>
+            <input
+              type="number"
+              min={0}
+              value={unitArea || ''}
+              onChange={(e) => setUnitArea(Number(e.target.value))}
+              placeholder="600"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>عداد الكهرباء</label>
+            <input value={electricityMeter} onChange={(e) => setElectricityMeter(e.target.value)} />
+          </div>
+
+          <div className="form-group">
+            <label>عداد المياه</label>
+            <input value={waterMeter} onChange={(e) => setWaterMeter(e.target.value)} />
+          </div>
+
+          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={hasMezzanine}
+              onChange={(e) => setHasMezzanine(e.target.checked)}
+              id="hasMezzanine"
+            />
+            <label htmlFor="hasMezzanine" style={{ margin: 0 }}>
+              يوجد ميزانين
+            </label>
+          </div>
+        </div>
+
+        {/* ===== بيانات الصك ===== */}
+        <h4 style={{ marginTop: 18, marginBottom: 8 }}>رقم الصك</h4>
+        <div className="form-grid">
+          <div className="form-group">
+            <label>رقم الصك</label>
+            <input value={deedNumber} onChange={(e) => setDeedNumber(e.target.value)} />
+          </div>
+
+          <div className="form-group">
+            <label>تاريخ إصدار الصك</label>
+            <input type="date" value={deedIssueDate} onChange={(e) => setDeedIssueDate(e.target.value)} />
+          </div>
+
+          <div className="form-group">
+            <label>مكان إصدار الصك</label>
+            <input value={deedIssuePlace} onChange={(e) => setDeedIssuePlace(e.target.value)} placeholder="مثال: الرياض" />
+          </div>
+        </div>
+
         <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
-          <button
-            className="primary-btn"
-            onClick={addContract}
-            disabled={saving}
-          >
+          <button className="primary-btn" onClick={addContract} disabled={saving}>
             {saving ? 'جاري الحفظ...' : 'حفظ العقد'}
           </button>
 
