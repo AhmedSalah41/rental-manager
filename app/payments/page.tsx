@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
 /* =====================
-   Types (للـ UI فقط)
+   Type للعرض فقط
 ===================== */
 type PaymentRow = {
   id: string;
@@ -25,13 +25,13 @@ export default function PaymentsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    load();
+    loadPayments();
   }, []);
 
   /* =====================
-     Load Data
+     Load Payments
   ===================== */
-  async function load() {
+  async function loadPayments() {
     setLoading(true);
 
     const { data, error } = await supabase
@@ -50,24 +50,21 @@ export default function PaymentsPage() {
       .order('due_date', { ascending: true });
 
     if (error) {
-      console.error(error);
+      console.error('PAYMENTS ERROR:', error);
       setRows([]);
       setLoading(false);
       return;
     }
 
-    /**
-     * 🔥 التحويل السحري هنا
-     * بنحوّل Array العلاقات لكائن بسيط
-     */
-    const normalized: PaymentRow[] = (data || []).map((r: any) => {
-      const contract = r.contracts?.[0];
+    // ✅ هنا الحل: نحول الداتا لشكل بسيط
+    const normalized: PaymentRow[] = (data ?? []).map((row: any) => {
+      const contract = row.contracts?.[0];
 
       return {
-        id: r.id,
-        due_date: r.due_date,
-        amount: r.amount,
-        status: r.status,
+        id: row.id,
+        due_date: row.due_date,
+        amount: row.amount,
+        status: row.status,
         contract_no: contract?.contract_no || '-',
         tenant_name: contract?.tenants?.[0]?.name || '-',
         property_code: contract?.properties?.[0]?.code || '-',
