@@ -173,6 +173,37 @@ export default function ContractsPage() {
   }
 
   /* =======================
+   Generate Installments
+======================= */
+
+async function generateInstallments(contractId: string) {
+  const step =
+    payFrequency === 'monthly'
+      ? 1
+      : payFrequency === 'quarterly'
+      ? 3
+      : 12;
+
+  const installments = [];
+  let current = new Date(startDate);
+  const end = new Date(endDate);
+
+  while (current < end) {
+    installments.push({
+      contract_id: contractId,
+      due_date: current.toISOString().split('T')[0],
+      amount: rentAmount * step,
+      status: 'unpaid',
+    });
+
+    current.setMonth(current.getMonth() + step);
+  }
+
+  if (installments.length > 0) {
+    await supabase.from('installments').insert(installments);
+  }
+}
+  /* =======================
      Add Contract
   ======================= */
 
@@ -189,36 +220,40 @@ export default function ContractsPage() {
 
     setSaving(true);
 
-    const { error } = await supabase.from('contracts').insert([
-      {
-        contract_no: contractNo.trim(),
-        property_id: propertyId,
-        tenant_id: tenantId,
-        start_date: startDate,
-        end_date: endDate,
-        duration_months: durationMonths,
-        rent_amount: rentAmount,
-        pay_frequency: payFrequency,
+    const { data, error } = await supabase
+  .from('contracts')
+  .insert([
+    {
+      contract_no: contractNo.trim(),
+      property_id: propertyId,
+      tenant_id: tenantId,
+      start_date: startDate,
+      end_date: endDate,
+      duration_months: durationMonths,
+      rent_amount: rentAmount,
+      pay_frequency: payFrequency,
 
-        // بيانات العقد
-        contract_type: contractType || null,
-        contract_place: contractPlace || null,
+      contract_type: contractType || null,
+      contract_place: contractPlace || null,
 
-        // بيانات الصك
-        deed_number: deedNumber || null,
-        deed_issue_date: deedIssueDate || null,
-        deed_issue_place: deedIssuePlace || null,
+      deed_number: deedNumber || null,
+      deed_issue_date: deedIssueDate || null,
+      deed_issue_place: deedIssuePlace || null,
 
-        // بيانات الوحدة
-        unit_type: unitType || null,
-        unit_no: unitNo || null,
-        floor_no: floorNo || null,
-        unit_area: unitArea > 0 ? unitArea : null,
-        has_mezzanine: hasMezzanine,
-        electricity_meter: electricityMeter || null,
-        water_meter: waterMeter || null,
-      },
-    ]);
+      unit_type: unitType || null,
+      unit_no: unitNo || null,
+      floor_no: floorNo || null,
+      unit_area: unitArea > 0 ? unitArea : null,
+      has_mezzanine: hasMezzanine,
+      electricity_meter: electricityMeter || null,
+      water_meter: waterMeter || null,
+    },
+  ])
+  .select()
+  .single();
+  if (data?.id) {
+  await generateInstallments(data.id);
+}
 
     setSaving(false);
 
