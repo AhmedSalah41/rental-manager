@@ -4,16 +4,16 @@ import AppShell from '@/components/AppShell';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
+/* =====================
+   Types
+===================== */
 type AlertRow = {
   id: string;
   due_date: string;
   amount: number;
-  contracts: {
-    contract_no: string;
-    tenants: {
-      name: string;
-    };
-  };
+  contract_no: string;
+  tenant_name: string;
+  isLate: boolean;
 };
 
 export default function DashboardPage() {
@@ -61,13 +61,13 @@ export default function DashboardPage() {
   }
 
   /* =====================
-     Load Alerts (Next 5 days + Late)
+     Load Alerts (FIXED)
   ===================== */
   async function loadAlerts() {
     const today = new Date();
     const next5Days = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('installments')
       .select(`
         id,
@@ -82,12 +82,38 @@ export default function DashboardPage() {
       .lte('due_date', next5Days.toISOString().slice(0, 10))
       .order('due_date', { ascending: true });
 
-    setAlerts(data || []);
+    if (error) {
+      console.error(error);
+      setAlerts([]);
+      return;
+    }
+
+    // ✅ تطبيع الداتا (ARRAY ➜ OBJECT)
+    const normalized: AlertRow[] = (data ?? []).map((row: any) => {
+      const contract = row.contracts?.[0];
+
+      const dueDate = new Date(row.due_date);
+      const isLate = dueDate < today;
+
+      return {
+        id: row.id,
+        due_date: row.due_date,
+        amount: row.amount,
+        contract_no: contract?.contract_no ?? '-',
+        tenant_name: contract?.tenants?.name ?? '-',
+        isLate,
+      };
+    });
+
+    setAlerts(normalized);
   }
 
+  /* =====================
+     UI
+  ===================== */
   return (
     <AppShell title="لوحة التحكم">
-      {/* ===== Header ===== */}
+      {/* Header */}
       <div className="page-header">
         <div>
           <h1>لوحة التحكم</h1>
@@ -95,36 +121,32 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ===== Alerts ===== */}
+      {/* Alerts */}
       {alerts.length > 0 && (
         <div className="content-card" style={{ borderRight: '5px solid var(--warning-color)' }}>
           <div className="card-body">
             <h3 style={{ marginBottom: 12 }}>🔔 تنبيهات الاستحقاقات</h3>
 
-            {alerts.map((a) => {
-              const isLate = new Date(a.due_date) < new Date();
-
-              return (
-                <div
-                  key={a.id}
-                  style={{
-                    padding: '10px 0',
-                    borderBottom: '1px solid #eee',
-                    color: isLate ? 'var(--danger-color)' : 'inherit',
-                  }}
-                >
-                  <strong>{a.contracts.contract_no}</strong> – {a.contracts.tenants.name}
-                  <br />
-                  قسط بقيمة <b>{a.amount.toLocaleString()}</b> بتاريخ {a.due_date}
-                  {isLate && <span style={{ marginRight: 8 }}>⚠️ متأخر</span>}
-                </div>
-              );
-            })}
+            {alerts.map((a) => (
+              <div
+                key={a.id}
+                style={{
+                  padding: '10px 0',
+                  borderBottom: '1px solid #eee',
+                  color: a.isLate ? 'var(--danger-color)' : 'inherit',
+                }}
+              >
+                <strong>{a.contract_no}</strong> – {a.tenant_name}
+                <br />
+                قسط بقيمة <b>{a.amount.toLocaleString()}</b> بتاريخ {a.due_date}
+                {a.isLate && <span style={{ marginRight: 8 }}>⚠️ متأخر</span>}
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* ===== Stats ===== */}
+      {/* Stats */}
       <div className="grid">
         <div className="card">
           <h4 className="muted">عدد العقارات</h4>
