@@ -345,35 +345,42 @@ table tbody tr:hover{
   position: absolute;
   top: -6px;
   right: -6px;
-  background: var(--danger-color);
-  color: #fff;
+  background: #ef4444;
+  color: white;
   font-size: 11px;
-  padding: 2px 6px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .notif-dropdown {
   position: absolute;
-  top: 60px;
-  right: 20px;
+  top: 38px;
+  right: 0;            /* ✅ مهم */
   width: 320px;
   background: #fff;
-  box-shadow: var(--box-shadow);
   border-radius: 10px;
+  box-shadow: 0 10px 25px rgba(0,0,0,.15);
   padding: 12px;
   z-index: 9999;
 }
 
 .notif-item {
   padding: 10px;
-  border-bottom: 1px solid #eee;
+  border-radius: 8px;
   cursor: pointer;
+  transition: 0.2s;
+  margin-bottom: 6px;
 }
 
 .notif-item:hover {
-  background: #f8f9fa;
+  background: #f3f4f6;
 }
 
 .notif-item.late {
-  background: #fff5f5;
+  background: #fff7ed;
+  border-right: 4px solid #f59e0b;
 }
