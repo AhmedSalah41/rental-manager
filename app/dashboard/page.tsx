@@ -64,50 +64,49 @@ export default function DashboardPage() {
      Load Alerts (FIXED)
   ===================== */
   async function loadAlerts() {
-    const today = new Date();
-    const next5Days = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+  const today = new Date();
+  const next5Days = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
 
-    const { data, error } = await supabase
-      .from('installments')
-      .select(`
-        id,
-        due_date,
-        amount,
-        contracts:contract_id (
-          contract_no,
-          tenants:tenant_id ( name )
-        )
-      `)
-      .eq('status', 'pending')
-      .lte('due_date', next5Days.toISOString().slice(0, 10))
-      .order('due_date', { ascending: true });
+  const { data, error } = await supabase
+    .from('installments')
+    .select(`
+      id,
+      due_date,
+      amount,
+      contracts:contract_id (
+        contract_no,
+        tenants:tenant_id ( name )
+      )
+    `)
+    .eq('status', 'pending')
+    .lte('due_date', next5Days.toISOString().slice(0, 10))
+    .order('due_date', { ascending: true });
 
-    if (error) {
-      console.error(error);
-      setAlerts([]);
-      return;
-    }
-
-    // ✅ تطبيع الداتا (ARRAY ➜ OBJECT)
-    const normalized: AlertRow[] = (data ?? []).map((row: any) => {
-      const contract = row.contracts?.[0];
-
-      const dueDate = new Date(row.due_date);
-      const isLate = dueDate < today;
-
-      return {
-        id: row.id,
-        due_date: row.due_date,
-        amount: row.amount,
-        contract_no: contract?.contract_no ?? '-',
-        tenant_name: contract?.tenants?.name ?? '-',
-        isLate,
-      };
-    });
-
-    setAlerts(normalized);
+  if (error) {
+    console.error(error);
+    setAlerts([]);
+    return;
   }
 
+  // ✅ هنا الحل النهائي
+  const normalized: AlertRow[] = (data ?? []).map((row: any) => {
+    const contract = row.contracts?.[0]; // مهم جدًا
+
+    const due = new Date(row.due_date);
+    const isLate = due < today;
+
+    return {
+      id: row.id,
+      due_date: row.due_date,
+      amount: row.amount,
+      contract_no: contract?.contract_no ?? '-',
+      tenant_name: contract?.tenants?.name ?? '-',
+      isLate,
+    };
+  });
+
+  setAlerts(normalized); // ✅ ده السطر الوحيد المسموح
+}
   /* =====================
      UI
   ===================== */
