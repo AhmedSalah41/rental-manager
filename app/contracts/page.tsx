@@ -18,7 +18,14 @@ type Tenant = {
   name: string;
 };
 
-// ✅ خلت العلاقات تقبل Array أو Object أو null (عشان Supabase ساعات بيرجعها array)
+type Installment = {
+  id: string;
+  contract_id: string;
+  due_date: string;
+  amount: number;
+  status: 'pending' | 'paid' | 'late' | string;
+};
+
 type ContractRow = {
   id: string;
   contract_no: string;
@@ -26,7 +33,7 @@ type ContractRow = {
   end_date: string;
   duration_months: number;
   rent_amount: number;
-  pay_frequency: string;
+  pay_frequency: 'monthly' | 'quarterly' | 'yearly' | string;
 
   contract_type?: string;
   contract_place?: string;
@@ -43,8 +50,12 @@ type ContractRow = {
   electricity_meter?: string;
   water_meter?: string;
 
-  properties?: { code: string }[] | { code: string } | null;
-  tenants?: { name: string }[] | { name: string } | null;
+  // joins (object)
+  properties?: { code: string } | null;
+  tenants?: { name: string } | null;
+
+  // attached after second query
+  installments?: Installment[];
 };
 
 /* =======================
@@ -60,17 +71,34 @@ function calculateDurationMonths(start: string, end: string): number {
   return (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth());
 }
 
-// ✅ Helpers لتوحيد قراءة العلاقات (array/object)
-function getPropertyCode(p: ContractRow['properties']): string {
-  if (!p) return '-';
-  if (Array.isArray(p)) return p[0]?.code || '-';
-  return p.code || '-';
+function addMonths(date: Date, months: number) {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months);
+  return d;
 }
 
-function getTenantName(t: ContractRow['tenants']): string {
-  if (!t) return '-';
-  if (Array.isArray(t)) return t[0]?.name || '-';
-  return t.name || '-';
+function toYMD(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function sumAmounts(items: Installment[], status?: 'paid' | 'pending') {
+  return items
+    .filter((i) => (status ? i.status === status : true))
+    .reduce((s, i) => s + Number(i.amount || 0), 0);
+}
+
+function getNextPending(items: Installment[]) {
+  return [...items]
+    .filter((i) => i.status === 'pending')
+    .sort((a, b) => a.due_date.localeCompare(b.due_date))[0] || null;
+}
+
+function isLateInstallment(i: Installment) {
+  // لو DB عندك مش بتخزن late هنحسبها
+  if (i.status === 'late') return true;
+  if (i.status !== 'pending') return false;
+  const today = toYMD(new Date());
+  return i.due_date < today;
 }
 
 /* =======================
@@ -81,6 +109,9 @@ export default function ContractsPage() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [contracts, setContracts] = useState<ContractRow[]>([]);
+
+  // Accordion open row
+  const [openId, setOpenId] = useState<string | null>(null);
 
   // ===== بيانات أساسية =====
   const [contractNo, setContractNo] = useState('');
@@ -112,6 +143,7 @@ export default function ContractsPage() {
 
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [payingId, setPayingId] = useState<string | null>(null);
 
   const durationMonths = useMemo(() => {
     if (!startDate || !endDate) return 0;
@@ -128,33 +160,33 @@ export default function ContractsPage() {
   }, []);
 
   async function loadAll() {
-    await Promise.all([loadProperties(), loadTenants(), loadContracts()]);
+    await Promise.all([loadProperties(), loadTenants()]);
+    await loadContractsWithInstallments();
   }
 
   async function loadProperties() {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('properties')
       .select('id, code')
       .order('created_at', { ascending: false });
 
-    if (!error) setProperties(data || []);
+    setProperties(data || []);
   }
 
   async function loadTenants() {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('tenants')
       .select('id, name')
       .order('created_at', { ascending: false });
 
-    if (!error) setTenants(data || []);
+    setTenants(data || []);
   }
 
-  // ✅ أهم تعديل: نجيب العلاقات بـ alias على FK
-  async function loadContracts() {
-    const { data, error } = await supabase
+  // ✅ تحميل العقود + تحميل الأقساط في استعلام تاني (مضمون)
+  async function loadContractsWithInstallments() {
+    const { data: cData, error: cErr } = await supabase
       .from('contracts')
-      .select(
-        `
+      .select(`
         id,
         contract_no,
         start_date,
@@ -180,17 +212,50 @@ export default function ContractsPage() {
 
         properties:property_id ( code ),
         tenants:tenant_id ( name )
-      `
-      )
+      `)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error(error);
+    if (cErr) {
+      console.error(cErr);
+      setContracts([]);
       return;
     }
 
-    // ✅ نخليها آمنة من اختلاف شكل Supabase (array/object)
-    setContracts((data as any) ?? []);
+    const contractsBase: ContractRow[] = (cData as any) || [];
+    const ids = contractsBase.map((c) => c.id);
+
+    if (ids.length === 0) {
+      setContracts([]);
+      return;
+    }
+
+    const { data: iData, error: iErr } = await supabase
+      .from('installments')
+      .select('id, contract_id, due_date, amount, status')
+      .in('contract_id', ids)
+      .order('due_date', { ascending: true });
+
+    if (iErr) {
+      console.error(iErr);
+      // نعرض العقود حتى لو الأقساط فشلت
+      setContracts(contractsBase.map((c) => ({ ...c, installments: [] })));
+      return;
+    }
+
+    const inst = (iData as any as Installment[]) || [];
+    const map = new Map<string, Installment[]>();
+    for (const row of inst) {
+      const arr = map.get(row.contract_id) || [];
+      arr.push(row);
+      map.set(row.contract_id, arr);
+    }
+
+    const merged = contractsBase.map((c) => ({
+      ...c,
+      installments: map.get(c.id) || [],
+    }));
+
+    setContracts(merged);
   }
 
   /* =======================
@@ -198,7 +263,6 @@ export default function ContractsPage() {
   ======================= */
 
   async function addContract() {
-    // validations أساسية
     if (!contractNo.trim()) return alert('اكتب رقم العقد');
     if (!propertyId) return alert('اختار العقار');
     if (!tenantId) return alert('اختار المستأجر');
@@ -210,7 +274,6 @@ export default function ContractsPage() {
 
     setSaving(true);
 
-    // 1) حفظ العقد + رجّع ID
     const { data: contract, error } = await supabase
       .from('contracts')
       .insert([
@@ -224,16 +287,13 @@ export default function ContractsPage() {
           rent_amount: rentAmount,
           pay_frequency: payFrequency,
 
-          // بيانات العقد
           contract_type: contractType || null,
           contract_place: contractPlace || null,
 
-          // بيانات الصك
           deed_number: deedNumber || null,
           deed_issue_date: deedIssueDate || null,
           deed_issue_place: deedIssuePlace || null,
 
-          // بيانات الوحدة
           unit_type: unitType || null,
           unit_no: unitNo || null,
           floor_no: floorNo || null,
@@ -252,9 +312,8 @@ export default function ContractsPage() {
       return;
     }
 
-    // 2) توليد الاستحقاقات
-    const stepMonths =
-      payFrequency === 'monthly' ? 1 : payFrequency === 'quarterly' ? 3 : 12;
+    // توليد الاستحقاقات
+    const stepMonths = payFrequency === 'monthly' ? 1 : payFrequency === 'quarterly' ? 3 : 12;
 
     const installments: Array<{
       contract_id: string;
@@ -271,23 +330,19 @@ export default function ContractsPage() {
     while (current < end) {
       installments.push({
         contract_id: contract.id,
-        due_date: current.toISOString().slice(0, 10), // ✅ لازم string
+        due_date: toYMD(current),
         amount: rentAmount * stepMonths,
         status: 'pending',
       });
-      current.setMonth(current.getMonth() + stepMonths);
+      current = addMonths(current, stepMonths);
     }
 
-    // 3) حفظ الاستحقاقات
     if (installments.length > 0) {
-      const { error: instError } = await supabase
-        .from('installments')
-        .insert(installments);
-
+      const { error: instError } = await supabase.from('installments').insert(installments);
       if (instError) {
         setSaving(false);
         alert('تم حفظ العقد لكن حصل خطأ في توليد الاستحقاقات: ' + instError.message);
-        await loadContracts();
+        await loadContractsWithInstallments();
         return;
       }
     }
@@ -319,15 +374,46 @@ export default function ContractsPage() {
     setElectricityMeter('');
     setWaterMeter('');
 
-    loadContracts();
+    await loadContractsWithInstallments();
   }
 
   /* =======================
-     Delete Contract (with installments)
+     Pay installment
   ======================= */
-  async function deleteContract(contractId: string, label: string) {
+
+  async function markInstallmentPaid(installmentId: string) {
+    setPayingId(installmentId);
+
+    const { error } = await supabase
+      .from('installments')
+      .update({ status: 'paid' })
+      .eq('id', installmentId);
+
+    setPayingId(null);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    await loadContractsWithInstallments();
+  }
+
+  /* =======================
+     Delete Contract (+ installments)
+  ======================= */
+
+  async function deleteContract(contractId: string, contractNoLabel: string) {
+    // نحسب عدد الأقساط/المتبقي للعرض في التحذير
+    const target = contracts.find((c) => c.id === contractId);
+    const inst = target?.installments || [];
+    const total = sumAmounts(inst);
+    const paid = sumAmounts(inst, 'paid');
+    const remaining = total - paid;
+
     const ok = confirm(
-      `⚠️ تحذير\nسيتم حذف العقد (${label}) وجميع الاستحقاقات التابعة له.\nهل تريد المتابعة؟`
+      `⚠️ تحذير\nسيتم حذف العقد (${contractNoLabel}) وجميع الاستحقاقات التابعة له.\n` +
+      `عدد الأقساط: ${inst.length}\nالمتبقي: ${remaining.toLocaleString()}\n\nهل تريد المتابعة؟`
     );
     if (!ok) return;
 
@@ -346,10 +432,7 @@ export default function ContractsPage() {
     }
 
     // 2) حذف العقد
-    const { error } = await supabase
-      .from('contracts')
-      .delete()
-      .eq('id', contractId);
+    const { error } = await supabase.from('contracts').delete().eq('id', contractId);
 
     setDeletingId(null);
 
@@ -359,7 +442,8 @@ export default function ContractsPage() {
     }
 
     alert('✅ تم حذف العقد والاستحقاقات');
-    loadContracts();
+    await loadContractsWithInstallments();
+    if (openId === contractId) setOpenId(null);
   }
 
   /* =======================
@@ -528,7 +612,7 @@ export default function ContractsPage() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+        <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center' }}>
           <button className="primary-btn" onClick={addContract} disabled={saving}>
             {saving ? 'جاري الحفظ...' : 'حفظ العقد'}
           </button>
@@ -539,57 +623,137 @@ export default function ContractsPage() {
         </div>
       </div>
 
-      {/* ===== Contracts List ===== */}
+      {/* ===== Accordion Contracts ===== */}
       <div className="card">
-        <h3 className="card-title">قائمة العقود</h3>
+        <h3 className="card-title">متابعة العقود (Accordion)</h3>
 
         {contracts.length === 0 ? (
           <p className="muted">لا توجد عقود بعد</p>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>رقم العقد</th>
-                <th>العقار</th>
-                <th>المستأجر</th>
-                <th>بداية</th>
-                <th>نهاية</th>
-                <th>المدة</th>
-                <th>الإيجار</th>
-                <th>الدفع</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {contracts.map((c) => (
-                <tr key={c.id}>
-                  <td>{c.contract_no}</td>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {contracts.map((c) => {
+              const inst = c.installments || [];
+              const total = sumAmounts(inst);
+              const paid = sumAmounts(inst, 'paid');
+              const remaining = total - paid;
 
-                  {/* ✅ إصلاح العرض هنا */}
-                  <td>{getPropertyCode(c.properties)}</td>
-                  <td>{getTenantName(c.tenants)}</td>
+              const next = getNextPending(inst);
 
-                  <td>{c.start_date}</td>
-                  <td>{c.end_date}</td>
-                  <td>{c.duration_months} شهر</td>
-                  <td>{Number(c.rent_amount || 0).toLocaleString()}</td>
-                  <td>{c.pay_frequency}</td>
+              return (
+                <div key={c.id} className="content-card">
+                  {/* Header row */}
+                  <div
+                    className="card-body"
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'auto 1fr 1fr 1fr 1fr 1fr auto',
+                      gap: 12,
+                      alignItems: 'center',
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => setOpenId(openId === c.id ? null : c.id)}
+                  >
+                    <span style={{ fontWeight: 900 }}>{openId === c.id ? '▲' : '▼'}</span>
 
-                  {/* ✅ زر حذف */}
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <button
-                      className="btn btn-outline"
-                      style={{ borderColor: '#ef4444', color: '#ef4444' }}
-                      disabled={deletingId === c.id}
-                      onClick={() => deleteContract(c.id, c.contract_no)}
-                    >
-                      {deletingId === c.id ? 'جاري الحذف...' : 'حذف'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <strong>{c.contract_no}</strong>
+                    <span>{c.properties?.code || '-'}</span>
+                    <span>{c.tenants?.name || '-'}</span>
+
+                    <span>
+                      المتبقي: <b>{remaining.toLocaleString()}</b>
+                    </span>
+
+                    <span>
+                      {next ? (
+                        <>
+                          القسط القادم: <b>{Number(next.amount).toLocaleString()}</b>
+                          <br />
+                          <small className="muted">{next.due_date}</small>
+                        </>
+                      ) : (
+                        <span className="badge badge-success">مكتمل</span>
+                      )}
+                    </span>
+
+                    {/* actions */}
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                      <button
+                        className="btn btn-outline"
+                        style={{ borderColor: '#ef4444', color: '#ef4444' }}
+                        disabled={deletingId === c.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteContract(c.id, c.contract_no);
+                        }}
+                      >
+                        {deletingId === c.id ? 'جاري الحذف...' : 'حذف'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Details */}
+                  {openId === c.id && (
+                    <div className="card-body" style={{ borderTop: '1px solid #eee' }}>
+                      <div style={{ display: 'flex', gap: 18, marginBottom: 12, flexWrap: 'wrap' }}>
+                        <div>إجمالي العقد: <b>{total.toLocaleString()}</b></div>
+                        <div>المدفوع: <b>{paid.toLocaleString()}</b></div>
+                        <div>المتبقي: <b>{remaining.toLocaleString()}</b></div>
+                      </div>
+
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>تاريخ الاستحقاق</th>
+                            <th>المبلغ</th>
+                            <th>الحالة</th>
+                            <th></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {inst.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} style={{ textAlign: 'center' }}>
+                                لا توجد استحقاقات لهذا العقد
+                              </td>
+                            </tr>
+                          ) : (
+                            inst.map((i) => {
+                              const late = isLateInstallment(i);
+                              return (
+                                <tr key={i.id}>
+                                  <td>{i.due_date}</td>
+                                  <td>{Number(i.amount).toLocaleString()}</td>
+                                  <td>
+                                    {i.status === 'paid' && <span className="badge badge-success">مدفوع</span>}
+                                    {i.status === 'pending' && !late && <span className="badge badge-warning">قادم</span>}
+                                    {(i.status === 'late' || late) && <span className="badge badge-danger">متأخر</span>}
+                                  </td>
+                                  <td>
+                                    {i.status === 'pending' && (
+                                      <button
+                                        className="btn btn-primary"
+                                        disabled={payingId === i.id}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          markInstallmentPaid(i.id);
+                                        }}
+                                      >
+                                        {payingId === i.id ? '...' : 'دفع'}
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
     </AppShell>
