@@ -31,7 +31,7 @@ export default function DashboardPage() {
   const [openAlerts, setOpenAlerts] = useState(false);
 
   /* =====================
-     Load Data
+     Load Stats
   ===================== */
   useEffect(() => {
     loadStats();
@@ -65,7 +65,7 @@ export default function DashboardPage() {
   }
 
   /* =====================
-     Load Alerts
+     Load Alerts (IMPORTANT)
   ===================== */
   async function loadAlerts() {
     const today = new Date().toISOString().slice(0, 10);
@@ -91,6 +91,7 @@ export default function DashboardPage() {
       return;
     }
 
+    // ✅ NORMALIZATION (حل كل مشاكل TypeScript)
     const normalized: AlertRow[] = (data ?? []).map((row: any) => ({
       id: row.id,
       due_date: row.due_date,
@@ -116,10 +117,11 @@ export default function DashboardPage() {
         </div>
 
         {/* 🔔 Notifications */}
-        <div className="notif-wrapper">
+        
+        <div style={{ position: 'relative' }}>
           <button
             className="notif-btn"
-            onClick={() => setOpenAlerts(prev => !prev)}
+            onClick={() => setOpenAlerts(!openAlerts)}
           >
             🔔
             {alerts.length > 0 && (
@@ -129,7 +131,7 @@ export default function DashboardPage() {
 
           {openAlerts && (
             <div className="notif-dropdown">
-              <h4 className="notif-title">تنبيهات الاستحقاق</h4>
+              <h4>تنبيهات الاستحقاق</h4>
 
               {alerts.length === 0 ? (
                 <p className="muted">لا توجد تنبيهات</p>
@@ -140,7 +142,7 @@ export default function DashboardPage() {
                     className={`notif-item ${a.isLate ? 'late' : ''}`}
                     onClick={() => router.push('/payments')}
                   >
-                    <div className="notif-main">
+                    <div>
                       <strong>{a.contract_no}</strong>
                       <span className="muted"> – {a.tenant_name}</span>
                     </div>
@@ -152,10 +154,10 @@ export default function DashboardPage() {
               )}
 
               <div
-                className="notif-footer"
+                style={{ textAlign: 'center', marginTop: 10, cursor: 'pointer' }}
                 onClick={() => router.push('/payments')}
               >
-                عرض كل الاستحقاقات
+                <strong>عرض كل الاستحقاقات</strong>
               </div>
             </div>
           )}
@@ -166,22 +168,24 @@ export default function DashboardPage() {
       <div className="grid">
         <div className="card">
           <h4 className="muted">عدد العقارات</h4>
-          <p className="stat">{stats.properties}</p>
+          <p style={{ fontSize: 32, fontWeight: 700 }}>{stats.properties}</p>
         </div>
 
         <div className="card">
           <h4 className="muted">عدد المستأجرين</h4>
-          <p className="stat">{stats.tenants}</p>
+          <p style={{ fontSize: 32, fontWeight: 700 }}>{stats.tenants}</p>
         </div>
 
         <div className="card">
           <h4 className="muted">عدد العقود</h4>
-          <p className="stat">{stats.contracts}</p>
+          <p style={{ fontSize: 32, fontWeight: 700 }}>{stats.contracts}</p>
         </div>
 
         <div className="card">
           <h4 className="muted">استحقاقات قادمة</h4>
-          <p className="stat warning">{stats.pendingInstallments}</p>
+          <p style={{ fontSize: 32, fontWeight: 700, color: '#f59e0b' }}>
+            {stats.pendingInstallments}
+          </p>
         </div>
       </div>
     </AppShell>

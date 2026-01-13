@@ -341,7 +341,38 @@ table tbody tr:hover{
   cursor: pointer;
 }
 
+.notif-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #ef4444;
+  color: white;
+  font-size: 11px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
+.notif-dropdown {
+  position: fixed;
+  top: 64px;          /* حسب ارتفاع الهيدر */
+  right: 16px;        /* لأنها RTL */
+  left: auto;
+
+  width: 320px;
+  max-height: 70vh;
+  overflow-y: auto;
+
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+  z-index: 9999;
+
+  direction: rtl;
+}
 
 .notif-item {
   padding: 10px;
@@ -361,45 +392,3 @@ table tbody tr:hover{
 }
 
 
-/* الحاوية */
-.notif-wrapper {
-  position: relative;
-  display: inline-block;
-}
-
-/* الجرس */
-.notif-bell {
-  position: relative;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-}
-
-/* الرقم الأحمر */
-.notif-badge {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  background: red;
-  color: white;
-  font-size: 12px;
-  padding: 2px 6px;
-  border-radius: 50%;
-}
-
-/* القائمة */
-.notif-dropdown {
-  position: absolute;
-  top: calc(100% + 8px); /* تنزل تحت الجرس */
-  right: 0;              /* محاذاة يمين الجرس */
-  width: 320px;
-  max-height: 70vh;
-  overflow-y: auto;
-
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-  z-index: 9999;
-
-  direction: rtl;
-}
