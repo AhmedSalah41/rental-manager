@@ -1,28 +1,41 @@
 'use client';
 
 import AppShell from '@/components/AppShell';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
 /* =====================
    Types
 ===================== */
-type PaymentRow = {
+
+type Installment = {
   id: string;
   due_date: string;
   amount: number;
   status: 'pending' | 'paid';
+};
+
+type ContractSummary = {
+  contract_id: string;
   contract_no: string;
   tenant_name: string;
   property_code: string;
+
+  total: number;
+  paid: number;
+  remaining: number;
+
+  current: Installment | null;
+  installments: Installment[];
 };
 
 /* =====================
    Page
 ===================== */
+
 export default function PaymentsPage() {
-  const [rows, setRows] = useState<PaymentRow[]>([]);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'paid'>('all');
+  const [contracts, setContracts] = useState<ContractSummary[]>([]);
+  const [open, setOpen] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -30,8 +43,9 @@ export default function PaymentsPage() {
   }, []);
 
   /* =====================
-     Load Payments (FIXED)
+     Load & Group Payments
   ===================== */
+
   async function loadPayments() {
     setLoading(true);
 
@@ -43,6 +57,7 @@ export default function PaymentsPage() {
         amount,
         status,
         contracts:contract_id (
+          id,
           contract_no,
           tenants:tenant_id ( name ),
           properties:property_id ( code )
@@ -50,32 +65,70 @@ export default function PaymentsPage() {
       `)
       .order('due_date', { ascending: true });
 
-    if (error) {
+    if (error || !data) {
       console.error(error);
-      setRows([]);
+      setContracts([]);
       setLoading(false);
       return;
     }
 
-    // ✅ تطبيع صحيح (OBJECT مش ARRAY)
-    const normalized: PaymentRow[] = (data ?? []).map((row: any) => ({
-      id: row.id,
-      due_date: row.due_date,
-      amount: row.amount,
-      status: row.status,
-      contract_no: row.contracts?.contract_no ?? '-',
-      tenant_name: row.contracts?.tenants?.name ?? '-',
-      property_code: row.contracts?.properties?.code ?? '-',
-    }));
+    const map = new Map<string, ContractSummary>();
 
-    setRows(normalized);
+    data.forEach((row: any) => {
+      const c = row.contracts;
+      if (!c) return;
+
+      if (!map.has(c.id)) {
+        map.set(c.id, {
+          contract_id: c.id,
+          contract_no: c.contract_no,
+          tenant_name: c.tenants?.name ?? '-',
+          property_code: c.properties?.code ?? '-',
+
+          total: 0,
+          paid: 0,
+          remaining: 0,
+
+          current: null,
+          installments: [],
+        });
+      }
+
+      const contract = map.get(c.id)!;
+
+      contract.installments.push({
+        id: row.id,
+        due_date: row.due_date,
+        amount: row.amount,
+        status: row.status,
+      });
+
+      contract.total += row.amount;
+
+      if (row.status === 'paid') {
+        contract.paid += row.amount;
+      }
+    });
+
+    map.forEach((c) => {
+      c.remaining = c.total - c.paid;
+
+      const pending = c.installments
+        .filter(i => i.status === 'pending')
+        .sort((a, b) => a.due_date.localeCompare(b.due_date));
+
+      c.current = pending[0] || null;
+    });
+
+    setContracts(Array.from(map.values()));
     setLoading(false);
   }
 
   /* =====================
-     Pay
+     Pay Current Installment
   ===================== */
-  async function markAsPaid(id: string) {
+
+  async function payInstallment(id: string) {
     await supabase
       .from('installments')
       .update({ status: 'paid' })
@@ -85,47 +138,11 @@ export default function PaymentsPage() {
   }
 
   /* =====================
-     Filters & Totals
-  ===================== */
-  const filteredRows = useMemo(() => {
-    if (filter === 'all') return rows;
-    return rows.filter((r) => r.status === filter);
-  }, [rows, filter]);
-
-  const total = useMemo(
-    () => rows.reduce((s, r) => s + r.amount, 0),
-    [rows]
-  );
-
-  const paid = useMemo(
-    () => rows.filter(r => r.status === 'paid').reduce((s, r) => s + r.amount, 0),
-    [rows]
-  );
-
-  const remaining = total - paid;
-
-  /* =====================
      UI
   ===================== */
+
   return (
     <AppShell title="الاستحقاقات">
-      {/* Summary */}
-      <div className="content-card">
-        <div className="card-body" style={{ display: 'flex', gap: 24 }}>
-          <div>الإجمالي: <b>{total.toLocaleString()}</b></div>
-          <div>المدفوع: <b>{paid.toLocaleString()}</b></div>
-          <div>المتبقي: <b>{remaining.toLocaleString()}</b></div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
-        <button className="btn btn-outline" onClick={() => setFilter('all')}>الكل</button>
-        <button className="btn btn-outline" onClick={() => setFilter('pending')}>القادمة</button>
-        <button className="btn btn-outline" onClick={() => setFilter('paid')}>المدفوعة</button>
-      </div>
-
-      {/* Table */}
       <div className="content-card">
         <div className="card-body">
           {loading ? (
@@ -134,36 +151,91 @@ export default function PaymentsPage() {
             <table className="data-table">
               <thead>
                 <tr>
+                  <th></th>
                   <th>العقد</th>
                   <th>العقار</th>
                   <th>المستأجر</th>
-                  <th>التاريخ</th>
-                  <th>المبلغ</th>
-                  <th>الحالة</th>
+                  <th>القسط الحالي</th>
+                  <th>المتبقي</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map(r => (
-                  <tr key={r.id}>
-                    <td>{r.contract_no}</td>
-                    <td>{r.property_code}</td>
-                    <td>{r.tenant_name}</td>
-                    <td>{r.due_date}</td>
-                    <td>{r.amount.toLocaleString()}</td>
-                    <td>
-                      {r.status === 'paid'
-                        ? <span className="badge badge-success">مدفوع</span>
-                        : <span className="badge badge-warning">قادم</span>}
-                    </td>
-                    <td>
-                      {r.status === 'pending' && (
-                        <button className="btn btn-primary" onClick={() => markAsPaid(r.id)}>
-                          دفع
+                {contracts.map(c => (
+                  <>
+                    {/* ===== Main Row ===== */}
+                    <tr key={c.contract_id}>
+                      <td>
+                        <button
+                          className="btn btn-outline"
+                          onClick={() =>
+                            setOpen(open === c.contract_id ? null : c.contract_id)
+                          }
+                        >
+                          {open === c.contract_id ? '▲' : '▼'}
                         </button>
-                      )}
-                    </td>
-                  </tr>
+                      </td>
+
+                      <td>{c.contract_no}</td>
+                      <td>{c.property_code}</td>
+                      <td>{c.tenant_name}</td>
+
+                      <td>
+                        {c.current ? (
+                          <>
+                            {c.current.amount.toLocaleString()}
+                            <br />
+                            <small>{c.current.due_date}</small>
+                          </>
+                        ) : (
+                          <span className="badge badge-success">مكتمل</span>
+                        )}
+                      </td>
+
+                      <td>{c.remaining.toLocaleString()}</td>
+
+                      <td>
+                        {c.current && (
+                          <button
+                            className="btn btn-primary"
+                            onClick={() => payInstallment(c.current!.id)}
+                          >
+                            دفع
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+
+                    {/* ===== Expanded Installments ===== */}
+                    {open === c.contract_id && (
+                      <tr>
+                        <td colSpan={7}>
+                          <table className="data-table" style={{ background: '#fafafa' }}>
+                            <thead>
+                              <tr>
+                                <th>التاريخ</th>
+                                <th>المبلغ</th>
+                                <th>الحالة</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {c.installments.map(i => (
+                                <tr key={i.id}>
+                                  <td>{i.due_date}</td>
+                                  <td>{i.amount.toLocaleString()}</td>
+                                  <td>
+                                    {i.status === 'paid'
+                                      ? <span className="badge badge-success">مدفوع</span>
+                                      : <span className="badge badge-warning">قادم</span>}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 ))}
               </tbody>
             </table>
