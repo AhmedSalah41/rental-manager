@@ -333,3 +333,47 @@ table tbody tr:hover{
   color: #fff;
   border-color: var(--primary-color);
 }
+.notif-btn {
+  position: relative;
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.notif-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: var(--danger-color);
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 50%;
+}
+
+.notif-dropdown {
+  position: absolute;
+  top: 60px;
+  right: 20px;
+  width: 320px;
+  background: #fff;
+  box-shadow: var(--box-shadow);
+  border-radius: 10px;
+  padding: 12px;
+  z-index: 9999;
+}
+
+.notif-item {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+}
+
+.notif-item:hover {
+  background: #f8f9fa;
+}
+
+.notif-item.late {
+  background: #fff5f5;
+}

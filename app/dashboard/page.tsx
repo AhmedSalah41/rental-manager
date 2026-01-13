@@ -3,6 +3,7 @@
 import AppShell from '@/components/AppShell';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { useRouter } from 'next/navigation';
 
 /* =====================
    Types
@@ -17,6 +18,8 @@ type AlertRow = {
 };
 
 export default function DashboardPage() {
+  const router = useRouter();
+
   const [stats, setStats] = useState({
     properties: 0,
     tenants: 0,
@@ -25,15 +28,16 @@ export default function DashboardPage() {
   });
 
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
+  const [openAlerts, setOpenAlerts] = useState(false);
 
+  /* =====================
+     Load Stats
+  ===================== */
   useEffect(() => {
     loadStats();
     loadAlerts();
   }, []);
 
-  /* =====================
-     Load Stats
-  ===================== */
   async function loadStats() {
     const { count: properties } = await supabase
       .from('properties')
@@ -61,91 +65,105 @@ export default function DashboardPage() {
   }
 
   /* =====================
-     Load Alerts (FIXED)
+     Load Alerts (IMPORTANT)
   ===================== */
   async function loadAlerts() {
-  const today = new Date();
-  const next5Days = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+    const today = new Date().toISOString().slice(0, 10);
 
-  const { data, error } = await supabase
-    .from('installments')
-    .select(`
-      id,
-      due_date,
-      amount,
-      contracts:contract_id (
-        contract_no,
-        tenants:tenant_id ( name )
-      )
-    `)
-    .eq('status', 'pending')
-    .lte('due_date', next5Days.toISOString().slice(0, 10))
-    .order('due_date', { ascending: true });
+    const { data, error } = await supabase
+      .from('installments')
+      .select(`
+        id,
+        due_date,
+        amount,
+        contracts:contract_id (
+          contract_no,
+          tenants:tenant_id ( name )
+        )
+      `)
+      .eq('status', 'pending')
+      .order('due_date', { ascending: true })
+      .limit(5);
 
-  if (error) {
-    console.error(error);
-    setAlerts([]);
-    return;
-  }
+    if (error) {
+      console.error(error);
+      setAlerts([]);
+      return;
+    }
 
-  // ✅ هنا الحل النهائي
-  const normalized: AlertRow[] = (data ?? []).map((row: any) => {
-    const contract = row.contracts?.[0]; // مهم جدًا
-
-    const due = new Date(row.due_date);
-    const isLate = due < today;
-
-    return {
+    // ✅ NORMALIZATION (حل كل مشاكل TypeScript)
+    const normalized: AlertRow[] = (data ?? []).map((row: any) => ({
       id: row.id,
       due_date: row.due_date,
       amount: row.amount,
-      contract_no: contract?.contract_no ?? '-',
-      tenant_name: contract?.tenants?.name ?? '-',
-      isLate,
-    };
-  });
+      contract_no: row.contracts?.contract_no ?? '-',
+      tenant_name: row.contracts?.tenants?.name ?? '-',
+      isLate: row.due_date < today,
+    }));
 
-  setAlerts(normalized); // ✅ ده السطر الوحيد المسموح
-}
+    setAlerts(normalized);
+  }
+
   /* =====================
      UI
   ===================== */
   return (
     <AppShell title="لوحة التحكم">
-      {/* Header */}
+      {/* ===== Header ===== */}
       <div className="page-header">
         <div>
           <h1>لوحة التحكم</h1>
           <p>نظرة عامة على النظام</p>
         </div>
+
+        {/* 🔔 Notifications */}
+        <div style={{ position: 'relative' }}>
+          <button
+            className="notif-btn"
+            onClick={() => setOpenAlerts(!openAlerts)}
+          >
+            🔔
+            {alerts.length > 0 && (
+              <span className="notif-badge">{alerts.length}</span>
+            )}
+          </button>
+
+          {openAlerts && (
+            <div className="notif-dropdown">
+              <h4>تنبيهات الاستحقاق</h4>
+
+              {alerts.length === 0 ? (
+                <p className="muted">لا توجد تنبيهات</p>
+              ) : (
+                alerts.map(a => (
+                  <div
+                    key={a.id}
+                    className={`notif-item ${a.isLate ? 'late' : ''}`}
+                    onClick={() => router.push('/payments')}
+                  >
+                    <div>
+                      <strong>{a.contract_no}</strong>
+                      <span className="muted"> – {a.tenant_name}</span>
+                    </div>
+                    <small>
+                      {a.isLate ? '⚠️ متأخر' : `موعده ${a.due_date}`}
+                    </small>
+                  </div>
+                ))
+              )}
+
+              <div
+                style={{ textAlign: 'center', marginTop: 10, cursor: 'pointer' }}
+                onClick={() => router.push('/payments')}
+              >
+                <strong>عرض كل الاستحقاقات</strong>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Alerts */}
-      {alerts.length > 0 && (
-        <div className="content-card" style={{ borderRight: '5px solid var(--warning-color)' }}>
-          <div className="card-body">
-            <h3 style={{ marginBottom: 12 }}>🔔 تنبيهات الاستحقاقات</h3>
-
-            {alerts.map((a) => (
-              <div
-                key={a.id}
-                style={{
-                  padding: '10px 0',
-                  borderBottom: '1px solid #eee',
-                  color: a.isLate ? 'var(--danger-color)' : 'inherit',
-                }}
-              >
-                <strong>{a.contract_no}</strong> – {a.tenant_name}
-                <br />
-                قسط بقيمة <b>{a.amount.toLocaleString()}</b> بتاريخ {a.due_date}
-                {a.isLate && <span style={{ marginRight: 8 }}>⚠️ متأخر</span>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Stats */}
+      {/* ===== Stats ===== */}
       <div className="grid">
         <div className="card">
           <h4 className="muted">عدد العقارات</h4>
