@@ -18,6 +18,7 @@ type Tenant = {
   name: string;
 };
 
+// ✅ خلت العلاقات تقبل Array أو Object أو null (عشان Supabase ساعات بيرجعها array)
 type ContractRow = {
   id: string;
   contract_no: string;
@@ -42,8 +43,8 @@ type ContractRow = {
   electricity_meter?: string;
   water_meter?: string;
 
-  properties: { code: string }[];
-  tenants: { name: string }[];
+  properties?: { code: string }[] | { code: string } | null;
+  tenants?: { name: string }[] | { name: string } | null;
 };
 
 /* =======================
@@ -57,6 +58,19 @@ function calculateDurationMonths(start: string, end: string): number {
   if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) return 0;
 
   return (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth());
+}
+
+// ✅ Helpers لتوحيد قراءة العلاقات (array/object)
+function getPropertyCode(p: ContractRow['properties']): string {
+  if (!p) return '-';
+  if (Array.isArray(p)) return p[0]?.code || '-';
+  return p.code || '-';
+}
+
+function getTenantName(t: ContractRow['tenants']): string {
+  if (!t) return '-';
+  if (Array.isArray(t)) return t[0]?.name || '-';
+  return t.name || '-';
 }
 
 /* =======================
@@ -97,6 +111,7 @@ export default function ContractsPage() {
   const [waterMeter, setWaterMeter] = useState('');
 
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const durationMonths = useMemo(() => {
     if (!startDate || !endDate) return 0;
@@ -134,6 +149,7 @@ export default function ContractsPage() {
     if (!error) setTenants(data || []);
   }
 
+  // ✅ أهم تعديل: نجيب العلاقات بـ alias على FK
   async function loadContracts() {
     const { data, error } = await supabase
       .from('contracts')
@@ -162,14 +178,19 @@ export default function ContractsPage() {
         electricity_meter,
         water_meter,
 
-        properties ( code ),
-        tenants ( name )
+        properties:property_id ( code ),
+        tenants:tenant_id ( name )
       `
       )
-      .returns<ContractRow[]>()
       .order('created_at', { ascending: false });
 
-    if (!error) setContracts(data ?? []);
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    // ✅ نخليها آمنة من اختلاف شكل Supabase (array/object)
+    setContracts((data as any) ?? []);
   }
 
   /* =======================
@@ -298,6 +319,46 @@ export default function ContractsPage() {
     setElectricityMeter('');
     setWaterMeter('');
 
+    loadContracts();
+  }
+
+  /* =======================
+     Delete Contract (with installments)
+  ======================= */
+  async function deleteContract(contractId: string, label: string) {
+    const ok = confirm(
+      `⚠️ تحذير\nسيتم حذف العقد (${label}) وجميع الاستحقاقات التابعة له.\nهل تريد المتابعة؟`
+    );
+    if (!ok) return;
+
+    setDeletingId(contractId);
+
+    // 1) حذف الاستحقاقات
+    const { error: instError } = await supabase
+      .from('installments')
+      .delete()
+      .eq('contract_id', contractId);
+
+    if (instError) {
+      setDeletingId(null);
+      alert('خطأ أثناء حذف الاستحقاقات: ' + instError.message);
+      return;
+    }
+
+    // 2) حذف العقد
+    const { error } = await supabase
+      .from('contracts')
+      .delete()
+      .eq('id', contractId);
+
+    setDeletingId(null);
+
+    if (error) {
+      alert('خطأ أثناء حذف العقد: ' + error.message);
+      return;
+    }
+
+    alert('✅ تم حذف العقد والاستحقاقات');
     loadContracts();
   }
 
@@ -496,19 +557,35 @@ export default function ContractsPage() {
                 <th>المدة</th>
                 <th>الإيجار</th>
                 <th>الدفع</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {contracts.map((c) => (
                 <tr key={c.id}>
                   <td>{c.contract_no}</td>
-                  <td>{c.properties?.[0]?.code || '-'}</td>
-                  <td>{c.tenants?.[0]?.name || '-'}</td>
+
+                  {/* ✅ إصلاح العرض هنا */}
+                  <td>{getPropertyCode(c.properties)}</td>
+                  <td>{getTenantName(c.tenants)}</td>
+
                   <td>{c.start_date}</td>
                   <td>{c.end_date}</td>
                   <td>{c.duration_months} شهر</td>
-                  <td>{c.rent_amount}</td>
+                  <td>{Number(c.rent_amount || 0).toLocaleString()}</td>
                   <td>{c.pay_frequency}</td>
+
+                  {/* ✅ زر حذف */}
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <button
+                      className="btn btn-outline"
+                      style={{ borderColor: '#ef4444', color: '#ef4444' }}
+                      disabled={deletingId === c.id}
+                      onClick={() => deleteContract(c.id, c.contract_no)}
+                    >
+                      {deletingId === c.id ? 'جاري الحذف...' : 'حذف'}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
