@@ -693,11 +693,50 @@ export default function ContractsPage() {
 
                   {/* Details */}
                   {openId === c.id && (
+                    
                     <div className="card-body" style={{ borderTop: '1px solid #eee' }}>
                       <div style={{ display: 'flex', gap: 18, marginBottom: 12, flexWrap: 'wrap' }}>
                         <div>إجمالي العقد: <b>{total.toLocaleString()}</b></div>
                         <div>المدفوع: <b>{paid.toLocaleString()}</b></div>
                         <div>المتبقي: <b>{remaining.toLocaleString()}</b></div>
+                      </div>
+                      {/* ===== Contract Details ===== */}
+                      <div className="content-card" style={{ marginBottom: 16 }}>
+                        <div
+                          className="card-body"
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                            gap: 12,
+                          }}
+                        >
+                          <div><b>رقم العقد:</b> {c.contract_no}</div>
+                          <div><b>نوع العقد:</b> {c.contract_type || '-'}</div>
+                          <div><b>مكان الإبرام:</b> {c.contract_place || '-'}</div>
+
+                          <div><b>العقار:</b> {c.properties?.code || '-'}</div>
+                          <div><b>المستأجر:</b> {c.tenants?.name || '-'}</div>
+
+                          <div><b>بداية العقد:</b> {c.start_date}</div>
+                          <div><b>نهاية العقد:</b> {c.end_date}</div>
+                          <div><b>مدة العقد:</b> {c.duration_months} شهر</div>
+
+                          <div><b>قيمة الإيجار:</b> {c.rent_amount.toLocaleString()}</div>
+                          <div><b>دورية الدفع:</b> {c.pay_frequency}</div>
+
+                          <div><b>نوع الوحدة:</b> {c.unit_type || '-'}</div>
+                          <div><b>رقم الوحدة:</b> {c.unit_no || '-'}</div>
+                          <div><b>الطابق:</b> {c.floor_no || '-'}</div>
+                          <div><b>المساحة:</b> {c.unit_area || '-'}</div>
+
+                          <div><b>ميزانين:</b> {c.has_mezzanine ? 'نعم' : 'لا'}</div>
+                          <div><b>عداد كهرباء:</b> {c.electricity_meter || '-'}</div>
+                          <div><b>عداد مياه:</b> {c.water_meter || '-'}</div>
+
+                          <div><b>رقم الصك:</b> {c.deed_number || '-'}</div>
+                          <div><b>تاريخ الصك:</b> {c.deed_issue_date || '-'}</div>
+                          <div><b>مكان إصدار الصك:</b> {c.deed_issue_place || '-'}</div>
+                        </div>
                       </div>
 
                       <table className="data-table">
