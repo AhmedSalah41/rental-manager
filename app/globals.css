@@ -357,10 +357,20 @@ table tbody tr:hover{
 }
 
 .notif-dropdown {
-  position: absolute;
-  top: 40px;
-  inset-inline-end: 0; /* RTL & LTR friendly */
-  inset-inline-start: auto;
+  position: fixed;
+  top: 64px;          /* حسب ارتفاع الهيدر */
+  right: 16px;        /* لأنها RTL */
+  left: auto;
+
+  width: 320px;
+  max-height: 70vh;
+  overflow-y: auto;
+
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+  z-index: 9999;
+
   direction: rtl;
 }
 
