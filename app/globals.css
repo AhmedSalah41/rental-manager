@@ -391,4 +391,12 @@ table tbody tr:hover{
   border-right: 4px solid #f59e0b;
 }
 
+.stat {
+  font-size: 32px;
+  font-weight: 800;
+}
+
+.stat.success { color: #22c55e; }
+.stat.warning { color: #f59e0b; }
+.stat.danger { color: #ef4444; }
 

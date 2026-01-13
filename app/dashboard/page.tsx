@@ -1,22 +1,41 @@
 'use client';
 
 import AppShell from '@/components/AppShell';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
+
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+import { Bar } from 'react-chartjs-2';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Tooltip,
+  Legend
+);
 
 /* =====================
    Types
 ===================== */
-type AlertRow = {
+type InstallmentRow = {
   id: string;
-  due_date: string;
   amount: number;
-  contract_no: string;
-  tenant_name: string;
-  isLate: boolean;
+  status: 'paid' | 'pending';
+  due_date: string;
 };
 
+/* =====================
+   Page
+===================== */
 export default function DashboardPage() {
   const router = useRouter();
 
@@ -24,18 +43,16 @@ export default function DashboardPage() {
     properties: 0,
     tenants: 0,
     contracts: 0,
-    pendingInstallments: 0,
   });
 
-  const [alerts, setAlerts] = useState<AlertRow[]>([]);
-  const [openAlerts, setOpenAlerts] = useState(false);
+  const [installments, setInstallments] = useState<InstallmentRow[]>([]);
 
   /* =====================
-     Load Stats
+     Load Data
   ===================== */
   useEffect(() => {
     loadStats();
-    loadAlerts();
+    loadInstallments();
   }, []);
 
   async function loadStats() {
@@ -51,141 +68,123 @@ export default function DashboardPage() {
       .from('contracts')
       .select('*', { count: 'exact', head: true });
 
-    const { count: pendingInstallments } = await supabase
-      .from('installments')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending');
-
     setStats({
       properties: properties || 0,
       tenants: tenants || 0,
       contracts: contracts || 0,
-      pendingInstallments: pendingInstallments || 0,
     });
   }
 
-  /* =====================
-     Load Alerts (IMPORTANT)
-  ===================== */
-  async function loadAlerts() {
-    const today = new Date().toISOString().slice(0, 10);
-
-    const { data, error } = await supabase
+  async function loadInstallments() {
+    const { data } = await supabase
       .from('installments')
-      .select(`
-        id,
-        due_date,
-        amount,
-        contracts:contract_id (
-          contract_no,
-          tenants:tenant_id ( name )
-        )
-      `)
-      .eq('status', 'pending')
-      .order('due_date', { ascending: true })
-      .limit(5);
+      .select('id, amount, status, due_date');
 
-    if (error) {
-      console.error(error);
-      setAlerts([]);
-      return;
-    }
-
-    // ✅ NORMALIZATION (حل كل مشاكل TypeScript)
-    const normalized: AlertRow[] = (data ?? []).map((row: any) => ({
-      id: row.id,
-      due_date: row.due_date,
-      amount: row.amount,
-      contract_no: row.contracts?.contract_no ?? '-',
-      tenant_name: row.contracts?.tenants?.name ?? '-',
-      isLate: row.due_date < today,
-    }));
-
-    setAlerts(normalized);
+    setInstallments(data || []);
   }
+
+  /* =====================
+     Calculations
+  ===================== */
+  const today = new Date().toISOString().slice(0, 10);
+
+  const totalPaid = useMemo(
+    () => installments
+      .filter(i => i.status === 'paid')
+      .reduce((s, i) => s + i.amount, 0),
+    [installments]
+  );
+
+  const totalPending = useMemo(
+    () => installments
+      .filter(i => i.status === 'pending')
+      .reduce((s, i) => s + i.amount, 0),
+    [installments]
+  );
+
+  const lateCount = useMemo(
+    () => installments.filter(
+      i => i.status === 'pending' && i.due_date < today
+    ).length,
+    [installments]
+  );
+
+  /* =====================
+     Chart
+  ===================== */
+  const chartData = {
+    labels: ['مدفوع', 'قادم', 'متأخر'],
+    datasets: [
+      {
+        label: 'الحالة',
+        data: [
+          totalPaid,
+          totalPending,
+          lateCount,
+        ],
+        backgroundColor: [
+          '#22c55e',
+          '#f59e0b',
+          '#ef4444',
+        ],
+        borderRadius: 8,
+      },
+    ],
+  };
 
   /* =====================
      UI
   ===================== */
   return (
     <AppShell title="لوحة التحكم">
-      {/* ===== Header ===== */}
       <div className="page-header">
         <div>
           <h1>لوحة التحكم</h1>
-          <p>نظرة عامة على النظام</p>
-        </div>
-
-        {/* 🔔 Notifications */}
-        
-        <div style={{ position: 'relative' }}>
-          <button
-            className="notif-btn"
-            onClick={() => setOpenAlerts(!openAlerts)}
-          >
-            🔔
-            {alerts.length > 0 && (
-              <span className="notif-badge">{alerts.length}</span>
-            )}
-          </button>
-
-          {openAlerts && (
-            <div className="notif-dropdown">
-              <h4>تنبيهات الاستحقاق</h4>
-
-              {alerts.length === 0 ? (
-                <p className="muted">لا توجد تنبيهات</p>
-              ) : (
-                alerts.map(a => (
-                  <div
-                    key={a.id}
-                    className={`notif-item ${a.isLate ? 'late' : ''}`}
-                    onClick={() => router.push('/payments')}
-                  >
-                    <div>
-                      <strong>{a.contract_no}</strong>
-                      <span className="muted"> – {a.tenant_name}</span>
-                    </div>
-                    <small>
-                      {a.isLate ? '⚠️ متأخر' : `موعده ${a.due_date}`}
-                    </small>
-                  </div>
-                ))
-              )}
-
-              <div
-                style={{ textAlign: 'center', marginTop: 10, cursor: 'pointer' }}
-                onClick={() => router.push('/payments')}
-              >
-                <strong>عرض كل الاستحقاقات</strong>
-              </div>
-            </div>
-          )}
+          <p>نظرة عامة على الأداء</p>
         </div>
       </div>
 
-      {/* ===== Stats ===== */}
+      {/* ===== KPI CARDS ===== */}
       <div className="grid">
         <div className="card">
-          <h4 className="muted">عدد العقارات</h4>
-          <p style={{ fontSize: 32, fontWeight: 700 }}>{stats.properties}</p>
+          <h4 className="muted">إجمالي المدفوع</h4>
+          <p className="stat success">{totalPaid.toLocaleString()}</p>
         </div>
 
         <div className="card">
-          <h4 className="muted">عدد المستأجرين</h4>
-          <p style={{ fontSize: 32, fontWeight: 700 }}>{stats.tenants}</p>
+          <h4 className="muted">إجمالي المتبقي</h4>
+          <p className="stat warning">{totalPending.toLocaleString()}</p>
         </div>
 
         <div className="card">
-          <h4 className="muted">عدد العقود</h4>
-          <p style={{ fontSize: 32, fontWeight: 700 }}>{stats.contracts}</p>
+          <h4 className="muted">أقساط متأخرة</h4>
+          <p className="stat danger">{lateCount}</p>
+        </div>
+      </div>
+
+      {/* ===== CHART ===== */}
+      <div className="content-card">
+        <div className="card-body">
+          <h3 style={{ marginBottom: 16 }}>حالة التحصيل</h3>
+          <Bar data={chartData} />
+        </div>
+      </div>
+
+      {/* ===== SYSTEM STATS ===== */}
+      <div className="grid">
+        <div className="card">
+          <h4 className="muted">العقارات</h4>
+          <p className="stat">{stats.properties}</p>
         </div>
 
         <div className="card">
-          <h4 className="muted">استحقاقات قادمة</h4>
-          <p style={{ fontSize: 32, fontWeight: 700, color: '#f59e0b' }}>
-            {stats.pendingInstallments}
-          </p>
+          <h4 className="muted">المستأجرين</h4>
+          <p className="stat">{stats.tenants}</p>
+        </div>
+
+        <div className="card">
+          <h4 className="muted">العقود</h4>
+          <p className="stat">{stats.contracts}</p>
         </div>
       </div>
     </AppShell>
