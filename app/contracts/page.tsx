@@ -411,6 +411,28 @@ export default function ContractsPage() {
     const paid = sumAmounts(inst, 'paid');
     const remaining = total - paid;
 
+    // ✅ الشرط الجديد: منع الحذف إذا كان هناك مدفوعات متبقية (غير صفر)
+    if (remaining > 0) {
+      alert(
+        `❌ لا يمكن حذف العقد!\n` +
+        `العقد (${contractNoLabel}) يحتوي على مدفوعات متبقية.\n` +
+        `المبلغ المتبقي للدفع: ${remaining.toLocaleString()}\n\n` +
+        `يرجى تسديد جميع الأقساط أولاً قبل حذف العقد.`
+      );
+      return;
+    }
+
+    // ✅ التحقق الإضافي: منع الحذف إذا كان هناك أقساط غير مدفوعة
+    const hasUnpaidInstallments = inst.some(i => i.status === 'pending' || i.status === 'late');
+    if (hasUnpaidInstallments) {
+      alert(
+        `❌ لا يمكن حذف العقد!\n` +
+        `العقد (${contractNoLabel}) يحتوي على أقساط لم يتم دفعها.\n` +
+        `يرجى معالجة جميع الأقساط أولاً.`
+      );
+      return;
+    }
+
     const ok = confirm(
       `⚠️ تحذير\nسيتم حذف العقد (${contractNoLabel}) وجميع الاستحقاقات التابعة له.\n` +
       `عدد الأقساط: ${inst.length}\nالمتبقي: ${remaining.toLocaleString()}\n\nهل تريد المتابعة؟`
@@ -638,6 +660,7 @@ export default function ContractsPage() {
               const remaining = total - paid;
 
               const next = getNextPending(inst);
+              const canDelete = remaining === 0 && !inst.some(i => i.status === 'pending' || i.status === 'late');
 
               return (
                 <div key={c.id} className="content-card">
@@ -679,12 +702,18 @@ export default function ContractsPage() {
                     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                       <button
                         className="btn btn-outline"
-                        style={{ borderColor: '#ef4444', color: '#ef4444' }}
-                        disabled={deletingId === c.id}
+                        style={{ 
+                          borderColor: canDelete ? '#ef4444' : '#ccc',
+                          color: canDelete ? '#ef4444' : '#999',
+                          opacity: canDelete ? 1 : 0.6,
+                          cursor: canDelete ? 'pointer' : 'not-allowed'
+                        }}
+                        disabled={deletingId === c.id || !canDelete}
                         onClick={(e) => {
                           e.stopPropagation();
                           deleteContract(c.id, c.contract_no);
                         }}
+                        title={!canDelete ? "لا يمكن الحذف: هناك أقساط متبقية" : "حذف العقد"}
                       >
                         {deletingId === c.id ? 'جاري الحذف...' : 'حذف'}
                       </button>
