@@ -524,3 +524,133 @@ table tbody tr:hover{
     box-shadow: 0 1px 6px rgba(0,0,0,.1);
   }
 }
+/* =======================
+   MOBILE OPTIMIZATION
+   (Additive – Safe)
+======================= */
+
+@media (max-width: 768px) {
+
+  /* ===== Topbar ===== */
+  .topbar {
+    height: 64px;
+    padding: 0 14px;
+  }
+
+  .logo h1 {
+    font-size: 18px;
+  }
+
+  .topbar-right {
+    gap: 10px;
+  }
+
+  .profile-btn {
+    padding: 6px 10px;
+  }
+
+  .profile-btn span {
+    display: none;
+  }
+
+  /* ===== Sidebar (Mobile Drawer) ===== */
+  .sidebar {
+    width: 260px;
+    transform: translateX(100%);
+    box-shadow: -10px 0 30px rgba(0,0,0,.15);
+  }
+
+  .sidebar.show {
+    transform: translateX(0);
+  }
+
+  .sidebar-nav ul li a {
+    padding: 14px 20px;
+    margin: 6px 10px;
+    font-size: 15px;
+  }
+
+  /* ===== Overlay when sidebar open ===== */
+  body.sidebar-open::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.4);
+    z-index: 998;
+  }
+
+  /* ===== Main Content ===== */
+  .main-content {
+    margin-right: 0;
+    padding: 16px;
+  }
+
+  /* ===== Page Header ===== */
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .page-header h1 {
+    font-size: 22px;
+  }
+
+  .page-header p {
+    font-size: 14px;
+  }
+
+  /* ===== Cards ===== */
+  .card,
+  .content-card,
+  .stat-card {
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  /* ===== Stats Grid ===== */
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stat {
+    font-size: 26px;
+  }
+
+  /* ===== Forms ===== */
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  input,
+  select {
+    font-size: 15px;
+    padding: 12px;
+  }
+
+  /* ===== Tables → Mobile Friendly ===== */
+  table,
+  .table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  table th,
+  table td {
+    font-size: 13px;
+    padding: 10px;
+  }
+
+  /* ===== Notifications ===== */
+  .notif-dropdown {
+    width: calc(100vw - 24px);
+    right: 12px;
+    left: 12px;
+    top: 60px;
+  }
+
+  .notif-item {
+    font-size: 14px;
+  }
+}
