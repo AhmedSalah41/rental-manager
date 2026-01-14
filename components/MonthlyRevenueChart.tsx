@@ -8,8 +8,6 @@ import {
   YAxis,
   Tooltip,
   Legend,
-  LineChart,
-  Line,
 } from 'recharts';
 
 type ChartRow = {
@@ -19,34 +17,47 @@ type ChartRow = {
   total: number;
 };
 
-export default function MonthlyRevenueChart({ data }: { data: ChartRow[] }) {
+export default function MonthlyRevenueChart({
+  data,
+}: {
+  data: ChartRow[];
+}) {
+  if (!data || data.length === 0) {
+    return <p className="muted">لا توجد بيانات للرسم البياني</p>;
+  }
+
   return (
-    <div className="card">
-      <h3 className="card-title">الإيرادات الشهرية</h3>
-
-      <div style={{ width: '100%', height: 350 }}>
-        <ResponsiveContainer>
-          <BarChart data={data}>
-            <XAxis dataKey="month" />
-            <YAxis />
-            <Tooltip
-              formatter={(v: number) => v.toLocaleString()}
-              labelFormatter={(l) => `شهر ${l}`}
-            />
-            <Legend />
-
-            <Bar dataKey="paid" fill="#22c55e" name="المدفوع" />
-            <Bar dataKey="pending" fill="#f59e0b" name="المتبقي" />
-            <Line
-              type="monotone"
-              dataKey="total"
-              stroke="#3b82f6"
-              strokeWidth={3}
-              name="الإجمالي"
-            />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+    <div style={{ width: '100%', height: 320 }}>
+      <ResponsiveContainer>
+        <BarChart data={data}>
+          <XAxis
+            dataKey="month"
+            tickFormatter={(m) => m.replace('-', '/')}
+          />
+          <YAxis />
+          <Tooltip
+            formatter={(value) =>
+              typeof value === 'number'
+                ? value.toLocaleString()
+                : ''
+            }
+            labelFormatter={(label) => `شهر ${label}`}
+          />
+          <Legend />
+          <Bar
+            dataKey="paid"
+            name="مدفوع"
+            fill="#22c55e"
+            radius={[6, 6, 0, 0]}
+          />
+          <Bar
+            dataKey="pending"
+            name="غير مدفوع"
+            fill="#f59e0b"
+            radius={[6, 6, 0, 0]}
+          />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
