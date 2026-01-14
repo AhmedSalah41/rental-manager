@@ -60,13 +60,36 @@ export default function AddPropertyPage() {
   }, []);
 
   /* =======================
-     Add Property
+     Add Property (SAFE)
   ======================= */
   const addProperty = async () => {
-    if (!code.trim()) return alert('اكتب كود العقار');
+    if (!code.trim()) {
+      alert('اكتب كود العقار');
+      return;
+    }
 
     setSaving(true);
 
+    /* ✅ 1) تحقق إن الكود مش مستخدم قبل كده */
+    const { data: exists, error: checkError } = await supabase
+      .from('properties')
+      .select('id')
+      .eq('code', code.trim())
+      .limit(1);
+
+    if (checkError) {
+      setSaving(false);
+      alert('حدث خطأ أثناء التحقق من كود العقار');
+      return;
+    }
+
+    if (exists && exists.length > 0) {
+      setSaving(false);
+      alert('❌ كود العقار مستخدم بالفعل، اختر كود مختلف');
+      return;
+    }
+
+    /* ✅ 2) الإضافة */
     const { error } = await supabase.from('properties').insert({
       code: code.trim(),
       type,
@@ -82,7 +105,7 @@ export default function AddPropertyPage() {
       return;
     }
 
-    // reset
+    /* reset form */
     setCode('');
     setType('villa');
     setLocation('');
@@ -159,7 +182,9 @@ export default function AddPropertyPage() {
             type="number"
             placeholder="المساحة"
             value={area}
-            onChange={(e) => setArea(e.target.value === '' ? '' : Number(e.target.value))}
+            onChange={(e) =>
+              setArea(e.target.value === '' ? '' : Number(e.target.value))
+            }
           />
 
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -174,7 +199,7 @@ export default function AddPropertyPage() {
         </button>
       </div>
 
-      {/* ===== List ===== */}
+      {/* ===== List (موجودة زي ما كانت) ===== */}
       <div className="card">
         <h3 className="card-title">العقارات المضافة</h3>
 
@@ -201,14 +226,22 @@ export default function AddPropertyPage() {
 
             {rows.map((p) => (
               <tr key={p.id}>
-                <td><strong>{p.code}</strong></td>
+                <td>
+                  <strong>{p.code}</strong>
+                </td>
                 <td>{PROPERTY_TYPE_LABEL[p.type] || '-'}</td>
                 <td>{p.location_text || '-'}</td>
                 <td>{p.area ?? '-'}</td>
                 <td>
-                  {p.status === 'vacant' && <span className="badge warning">فاضي</span>}
-                  {p.status === 'rented' && <span className="badge success">مؤجر</span>}
-                  {p.status === 'maintenance' && <span className="badge danger">صيانة</span>}
+                  {p.status === 'vacant' && (
+                    <span className="badge warning">فاضي</span>
+                  )}
+                  {p.status === 'rented' && (
+                    <span className="badge success">مؤجر</span>
+                  )}
+                  {p.status === 'maintenance' && (
+                    <span className="badge danger">صيانة</span>
+                  )}
                 </td>
                 <td>
                   <button
