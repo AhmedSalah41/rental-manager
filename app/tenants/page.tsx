@@ -57,6 +57,19 @@ export default function TenantsPage() {
   };
 
   /* =======================
+     Check National ID Unique
+  ======================= */
+  const nationalIdExists = async () => {
+    const { data } = await supabase
+      .from('tenants')
+      .select('id')
+      .eq('national_id', nationalId)
+      .neq('id', editingId || '');
+
+    return data && data.length > 0;
+  };
+
+  /* =======================
      Add / Update Tenant
   ======================= */
   const saveTenant = async () => {
@@ -66,6 +79,14 @@ export default function TenantsPage() {
     }
 
     setLoading(true);
+
+    // ✅ منع تكرار رقم الهوية
+    const exists = await nationalIdExists();
+    if (exists) {
+      setLoading(false);
+      alert('❌ رقم الهوية مسجل بالفعل لمستأجر آخر');
+      return;
+    }
 
     if (editingId) {
       // تعديل
