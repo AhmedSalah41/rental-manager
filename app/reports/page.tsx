@@ -3,7 +3,11 @@
 import AppShell from '@/components/AppShell';
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import MonthlyRevenueChart from '@/components/MonthlyRevenueChart';
 
+/* =====================
+   Types
+===================== */
 type ReportRow = {
   id: string;
   due_date: string;
@@ -14,6 +18,16 @@ type ReportRow = {
   property_code: string;
 };
 
+type ChartRow = {
+  month: string;
+  paid: number;
+  pending: number;
+  total: number;
+};
+
+/* =====================
+   Page
+===================== */
 export default function ReportsPage() {
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [from, setFrom] = useState('');
@@ -24,6 +38,9 @@ export default function ReportsPage() {
     loadReport();
   }, []);
 
+  /* =====================
+     Load Report
+  ===================== */
   async function loadReport() {
     setLoading(true);
 
@@ -68,29 +85,77 @@ export default function ReportsPage() {
     setLoading(false);
   }
 
-  /* ===== Totals ===== */
-  const total = useMemo(() => rows.reduce((s, r) => s + r.amount, 0), [rows]);
+  /* =====================
+     Totals
+  ===================== */
+  const total = useMemo(
+    () => rows.reduce((s, r) => s + r.amount, 0),
+    [rows]
+  );
+
   const paid = useMemo(
     () => rows.filter(r => r.status === 'paid').reduce((s, r) => s + r.amount, 0),
     [rows]
   );
+
   const remaining = total - paid;
+
   const late = useMemo(
     () =>
       rows.filter(
-        r => r.status === 'pending' && r.due_date < new Date().toISOString().slice(0, 10)
+        r =>
+          r.status === 'pending' &&
+          r.due_date < new Date().toISOString().slice(0, 10)
       ).reduce((s, r) => s + r.amount, 0),
     [rows]
   );
 
+  /* =====================
+     Chart Data (Monthly)
+  ===================== */
+  const chartData: ChartRow[] = useMemo(() => {
+    const map: Record<string, { paid: number; pending: number }> = {};
+
+    rows.forEach(r => {
+      const month = r.due_date.slice(0, 7); // YYYY-MM
+
+      if (!map[month]) {
+        map[month] = { paid: 0, pending: 0 };
+      }
+
+      if (r.status === 'paid') map[month].paid += r.amount;
+      else map[month].pending += r.amount;
+    });
+
+    return Object.keys(map)
+      .sort()
+      .map(month => ({
+        month,
+        paid: map[month].paid,
+        pending: map[month].pending,
+        total: map[month].paid + map[month].pending,
+      }));
+  }, [rows]);
+
+  /* =====================
+     UI
+  ===================== */
   return (
     <AppShell title="التقارير">
       {/* ===== Filters ===== */}
       <div className="card">
         <h3 className="card-title">فلترة التقرير</h3>
         <div className="form-grid">
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+          <input
+            type="date"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+          />
+          <input
+            type="date"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+          />
           <button className="primary-btn" onClick={loadReport}>
             تحديث التقرير
           </button>
@@ -101,7 +166,9 @@ export default function ReportsPage() {
       <div className="grid">
         <div className="card">
           <h4 className="muted">الإجمالي</h4>
-          <p style={{ fontSize: 28, fontWeight: 700 }}>{total.toLocaleString()}</p>
+          <p style={{ fontSize: 28, fontWeight: 700 }}>
+            {total.toLocaleString()}
+          </p>
         </div>
 
         <div className="card">
@@ -124,6 +191,12 @@ export default function ReportsPage() {
             {late.toLocaleString()}
           </p>
         </div>
+      </div>
+
+      {/* ===== Monthly Chart ===== */}
+      <div className="card">
+        <h3 className="card-title">الإيراد الشهري</h3>
+        <MonthlyRevenueChart data={chartData} />
       </div>
 
       {/* ===== Table ===== */}
