@@ -57,6 +57,12 @@ export default function Sidebar({
               <span />
             </Link>
           </li>
+          <li>
+            <Link href="/reports">
+              <i className="icon-chart" />
+              <span>التقارير</span>
+            </Link>
+          </li>
         </ul>
       </nav>
     </aside>
