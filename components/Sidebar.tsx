@@ -63,12 +63,13 @@ export default function Sidebar({
               <span>التقارير</span>
             </Link>
           </li>
-          <li>
-            <Link href="/reports/contracts">
+            <li className={itemClass(pathname, '/reports/contracts')}>
+             <Link href="/reports/contracts">
               <i className="icon-chart" />
-              <span>التقارير المالية</span>
+               <span>التقارير المالية</span>
             </Link>
           </li>
+          
         </ul>
       </nav>
     </aside>
