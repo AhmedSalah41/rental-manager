@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import AppShell from '@/components/AppShell';
 import { supabase } from '@/lib/supabaseClient';
 
+/* =======================
+   Types
+======================= */
 type Tenant = {
   id: string;
   name: string;
@@ -15,11 +18,18 @@ type Tenant = {
 export default function TenantsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
 
+  /* ===== Form State ===== */
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [nationalId, setNationalId] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
 
+  const [loading, setLoading] = useState(false);
+
+  /* =======================
+     Load Tenants
+  ======================= */
   useEffect(() => {
     fetchTenants();
   }, []);
@@ -33,50 +43,171 @@ export default function TenantsPage() {
     if (data) setTenants(data);
   };
 
-  const addTenant = async () => {
+  /* =======================
+     Check Contracts
+  ======================= */
+  const hasContracts = async (tenantId: string) => {
+    const { data } = await supabase
+      .from('contracts')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .limit(1);
+
+    return data && data.length > 0;
+  };
+
+  /* =======================
+     Add / Update Tenant
+  ======================= */
+  const saveTenant = async () => {
     if (!name || !nationalId || !phone) {
       alert('من فضلك اكمل البيانات الأساسية');
       return;
     }
 
-    const { error } = await supabase.from('tenants').insert({
-      name,
-      national_id: nationalId,
-      phone,
-      address,
-    });
+    setLoading(true);
 
-    if (error) {
-      alert(error.message);
+    if (editingId) {
+      // تعديل
+      const blocked = await hasContracts(editingId);
+      if (blocked) {
+        setLoading(false);
+        alert('❌ لا يمكن تعديل المستأجر لأنه مرتبط بعقد');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('tenants')
+        .update({
+          name,
+          national_id: nationalId,
+          phone,
+          address,
+        })
+        .eq('id', editingId);
+
+      if (error) {
+        setLoading(false);
+        alert(error.message);
+        return;
+      }
+    } else {
+      // إضافة
+      const { error } = await supabase.from('tenants').insert({
+        name,
+        national_id: nationalId,
+        phone,
+        address,
+      });
+
+      if (error) {
+        setLoading(false);
+        alert(error.message);
+        return;
+      }
+    }
+
+    resetForm();
+    fetchTenants();
+    setLoading(false);
+  };
+
+  /* =======================
+     Delete Tenant (SAFE)
+  ======================= */
+  const deleteTenant = async (id: string) => {
+    const ok = confirm(
+      'هل أنت متأكد من حذف المستأجر؟\n\n⚠️ لا يمكن الحذف إذا كان هناك عقد مرتبط به.'
+    );
+    if (!ok) return;
+
+    setLoading(true);
+
+    const blocked = await hasContracts(id);
+    if (blocked) {
+      setLoading(false);
+      alert('❌ لا يمكن حذف المستأجر لأنه مرتبط بعقد');
       return;
     }
 
-    setName('');
-    setNationalId('');
-    setPhone('');
-    setAddress('');
+    const { error } = await supabase.from('tenants').delete().eq('id', id);
+
+    setLoading(false);
+
+    if (error) {
+      alert('حدث خطأ أثناء الحذف');
+      return;
+    }
 
     fetchTenants();
   };
 
+  /* =======================
+     Helpers
+  ======================= */
+  const startEdit = (t: Tenant) => {
+    setEditingId(t.id);
+    setName(t.name);
+    setNationalId(t.national_id);
+    setPhone(t.phone);
+    setAddress(t.address || '');
+  };
+
+  const resetForm = () => {
+    setEditingId(null);
+    setName('');
+    setNationalId('');
+    setPhone('');
+    setAddress('');
+  };
+
+  /* =======================
+     UI
+  ======================= */
   return (
     <AppShell title="المستأجرين">
       <div style={{ display: 'grid', gap: 24 }}>
 
-        {/* ===== Add Tenant ===== */}
+        {/* ===== Add / Edit Tenant ===== */}
         <div className="card">
-          <h3 className="card-title">إضافة مستأجر جديد</h3>
+          <h3 className="card-title">
+            {editingId ? 'تعديل مستأجر' : 'إضافة مستأجر جديد'}
+          </h3>
 
           <div className="form-grid">
-            <input placeholder="اسم المستأجر" value={name} onChange={(e) => setName(e.target.value)} />
-            <input placeholder="رقم الهوية" value={nationalId} onChange={(e) => setNationalId(e.target.value)} />
-            <input placeholder="رقم الهاتف" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            <input placeholder="العنوان" value={address} onChange={(e) => setAddress(e.target.value)} />
+            <input
+              placeholder="اسم المستأجر"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <input
+              placeholder="رقم الهوية"
+              value={nationalId}
+              onChange={(e) => setNationalId(e.target.value)}
+            />
+            <input
+              placeholder="رقم الهاتف"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+            <input
+              placeholder="العنوان"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+            />
           </div>
 
-          <button className="primary-btn" onClick={addTenant}>
-            حفظ المستأجر
-          </button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="primary-btn" onClick={saveTenant} disabled={loading}>
+              {editingId ? 'حفظ التعديل' : 'حفظ المستأجر'}
+            </button>
+
+            {editingId && (
+              <button className="btn btn-outline" onClick={resetForm}>
+                إلغاء
+              </button>
+            )}
+          </div>
         </div>
 
         {/* ===== Tenants List ===== */}
@@ -90,12 +221,14 @@ export default function TenantsPage() {
                 <th>رقم الهوية</th>
                 <th>رقم الهاتف</th>
                 <th>العنوان</th>
+                <th>إجراءات</th>
               </tr>
             </thead>
+
             <tbody>
               {tenants.length === 0 && (
                 <tr>
-                  <td colSpan={4} style={{ textAlign: 'center' }}>
+                  <td colSpan={5} style={{ textAlign: 'center' }}>
                     لا توجد بيانات بعد
                   </td>
                 </tr>
@@ -107,6 +240,21 @@ export default function TenantsPage() {
                   <td>{t.national_id}</td>
                   <td>{t.phone}</td>
                   <td>{t.address || '-'}</td>
+                  <td style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      className="btn btn-outline"
+                      onClick={() => startEdit(t)}
+                    >
+                      ✏️ تعديل
+                    </button>
+                    <button
+                      className="btn btn-outline"
+                      style={{ color: '#e74c3c', borderColor: '#e74c3c' }}
+                      onClick={() => deleteTenant(t.id)}
+                    >
+                      🗑 حذف
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
