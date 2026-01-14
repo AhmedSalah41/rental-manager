@@ -14,9 +14,9 @@ type AlertRow = {
 
 export default function Topbar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   const router = useRouter();
-
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
   const [open, setOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
     loadAlerts();
@@ -56,6 +56,21 @@ export default function Topbar({ onToggleSidebar }: { onToggleSidebar: () => voi
     }));
 
     setAlerts(normalized);
+  }
+
+  // دالة تسجيل الخروج
+  async function handleLogout() {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      
+      // إعادة التوجيه إلى صفحة تسجيل الدخول
+      router.push('/login');
+      router.refresh();
+    } catch (error) {
+      console.error('خطأ في تسجيل الخروج:', error);
+      alert('حدث خطأ أثناء تسجيل الخروج');
+    }
   }
 
   return (
@@ -112,16 +127,109 @@ export default function Topbar({ onToggleSidebar }: { onToggleSidebar: () => voi
           )}
         </div>
 
-        {/* 👤 Profile */}
-        <button className="profile-btn" type="button">
-          <img
-            src="https://ui-avatars.com/api/?name=المدير&background=2c5aa0&color=fff"
-            alt="user"
-          />
-          <span>المدير</span>
-          <i className="fas fa-chevron-down" />
-        </button>
+        {/* 👤 Profile with Dropdown */}
+        <div style={{ position: 'relative' }}>
+          <button 
+            className="profile-btn" 
+            type="button"
+            onClick={() => setProfileOpen(!profileOpen)}
+          >
+            <img
+              src="https://ui-avatars.com/api/?name=المدير&background=2c5aa0&color=fff"
+              alt="user"
+            />
+            <span>المدير</span>
+            <i className="fas fa-chevron-down" />
+          </button>
+
+          {profileOpen && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              right: 0,
+              background: 'white',
+              border: '1px solid #e5e7eb',
+              borderRadius: '8px',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+              width: '200px',
+              marginTop: '8px',
+              zIndex: 1000,
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px 16px',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              onClick={() => {
+                setProfileOpen(false);
+                // يمكنك إضافة دالة للملف الشخصي هنا
+              }}>
+                <i className="fas fa-user" style={{ color: '#6b7280', width: '20px', textAlign: 'center' }} />
+                <span style={{ fontSize: '14px', color: '#374151' }}>الملف الشخصي</span>
+              </div>
+              
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px 16px',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              onClick={() => {
+                setProfileOpen(false);
+                // يمكنك إضافة دالة للإعدادات هنا
+              }}>
+                <i className="fas fa-cog" style={{ color: '#6b7280', width: '20px', textAlign: 'center' }} />
+                <span style={{ fontSize: '14px', color: '#374151' }}>الإعدادات</span>
+              </div>
+              
+              <div style={{ height: '1px', backgroundColor: '#e5e7eb', margin: '4px 0' }} />
+              
+              <div 
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 16px',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s',
+                  color: '#ef4444'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                onClick={handleLogout}
+              >
+                <i className="fas fa-sign-out-alt" style={{ color: '#ef4444', width: '20px', textAlign: 'center' }} />
+                <span style={{ fontSize: '14px', color: '#ef4444', fontWeight: '500' }}>تسجيل الخروج</span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
+      
+      {/* عند النقر خارج القائمة المنسدلة لإغلاقها */}
+      {profileOpen && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 999
+          }}
+          onClick={() => setProfileOpen(false)}
+        />
+      )}
     </header>
   );
 }
