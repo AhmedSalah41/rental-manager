@@ -1,184 +1,168 @@
 'use client';
 
 import AppShell from '@/components/AppShell';
-import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
 /* =======================
-   Types
+   Constants
 ======================= */
-type Property = {
-  id: string;
-  code: string;
-  type: string;
-  location?: string;
-  location_text?: string;
-  area?: number;
-  status?: string;
-};
+const PROPERTY_TYPES = [
+  { value: 'villa', label: 'فيلا' },
+  { value: 'land', label: 'أرض' },
+  { value: 'workshop', label: 'ورشة' },
+  { value: 'other', label: 'أخرى' },
+];
+
+const PROPERTY_STATUS = [
+  { value: 'vacant', label: 'فاضي' },
+  { value: 'rented', label: 'مؤجر' },
+  { value: 'maintenance', label: 'صيانة' },
+];
 
 /* =======================
-   Helpers
+   Page
 ======================= */
-const PROPERTY_TYPE_LABEL: Record<string, string> = {
-  villa: 'فيلا',
-  land: 'أرض',
-  workshop: 'ورشة',
-  other: 'أخرى',
-};
+export default function AddPropertyPage() {
+  const router = useRouter();
+  const [saving, setSaving] = useState(false);
 
-export default function PropertiesPage() {
-  const [rows, setRows] = useState<Property[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  /* =======================
-     Load Data
-  ======================= */
-  const load = async () => {
-    const { data } = await supabase
-      .from('properties')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    setRows(data || []);
-  };
-
-  useEffect(() => {
-    load();
-  }, []);
+  // ===== Form State =====
+  const [code, setCode] = useState('');
+  const [type, setType] = useState('');
+  const [locationText, setLocationText] = useState('');
+  const [area, setArea] = useState<number | ''>('');
+  const [status, setStatus] = useState('vacant');
+  const [notes, setNotes] = useState('');
 
   /* =======================
-     Delete Property (SAFE)
+     Save
   ======================= */
-  const deleteProperty = async (propertyId: string) => {
-    // 1️⃣ تأكيد المستخدم
-    const ok = confirm(
-      'هل أنت متأكد من حذف العقار؟\n\n⚠️ سيتم المنع إذا كان هناك عقود مرتبطة به.'
-    );
-    if (!ok) return;
+  const save = async () => {
+    // ===== Validation =====
+    if (!code.trim()) return alert('اكتب كود العقار');
+    if (!type) return alert('اختار نوع العقار');
 
-    setLoading(true);
+    if (!PROPERTY_TYPES.map(t => t.value).includes(type)) {
+      return alert('نوع العقار غير صالح');
+    }
 
-    // 2️⃣ التأكد إن مفيش عقود مربوطة
-    const { data: contracts, error: checkError } = await supabase
-      .from('contracts')
-      .select('id')
-      .eq('property_id', propertyId)
-      .limit(1);
+    setSaving(true);
 
-    if (checkError) {
-      setLoading(false);
-      alert('حدث خطأ أثناء التحقق من العقود');
+    const { error } = await supabase.from('properties').insert([
+      {
+        code: code.trim(),
+        type, // 👈 دايمًا ENGLISH (villa / land / ...)
+        location_text: locationText || null,
+        area: area ? Number(area) : null,
+        status,
+        notes: notes || null,
+      },
+    ]);
+
+    setSaving(false);
+
+    if (error) {
+      alert(error.message);
       return;
     }
 
-    if (contracts && contracts.length > 0) {
-      setLoading(false);
-      alert('❌ لا يمكن حذف العقار لأنه مرتبط بعقد واحد أو أكثر');
-      return;
-    }
-
-    // 3️⃣ الحذف
-    const { error: deleteError } = await supabase
-      .from('properties')
-      .delete()
-      .eq('id', propertyId);
-
-    setLoading(false);
-
-    if (deleteError) {
-      alert('حدث خطأ أثناء حذف العقار');
-      return;
-    }
-
-    alert('✅ تم حذف العقار بنجاح');
-    load();
+    alert('✅ تم إضافة العقار بنجاح');
+    router.push('/properties');
   };
 
   /* =======================
      UI
   ======================= */
   return (
-    <AppShell title="العقارات">
-      {/* ===== Header ===== */}
-      <div className="page-header">
-        <div>
-          <h1>العقارات</h1>
-          <p>عرض جميع العقارات</p>
+    <AppShell title="إضافة عقار جديد">
+      <div className="card">
+        <h3 className="card-title">إضافة عقار جديد</h3>
+
+        <div className="form-grid">
+          {/* كود العقار */}
+          <div className="form-group">
+            <label>كود العقار *</label>
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="مثال: V-101"
+            />
+          </div>
+
+          {/* نوع العقار */}
+          <div className="form-group">
+            <label>نوع العقار *</label>
+            <select value={type} onChange={(e) => setType(e.target.value)}>
+              <option value="">اختر النوع</option>
+              {PROPERTY_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* الموقع */}
+          <div className="form-group">
+            <label>الموقع</label>
+            <input
+              value={locationText}
+              onChange={(e) => setLocationText(e.target.value)}
+              placeholder="مثال: جدة – حي السلامة"
+            />
+          </div>
+
+          {/* المساحة */}
+          <div className="form-group">
+            <label>المساحة (م²)</label>
+            <input
+              type="number"
+              min={0}
+              value={area}
+              onChange={(e) => setArea(e.target.value ? Number(e.target.value) : '')}
+              placeholder="150"
+            />
+          </div>
+
+          {/* الحالة */}
+          <div className="form-group">
+            <label>الحالة</label>
+            <select value={status} onChange={(e) => setStatus(e.target.value)}>
+              {PROPERTY_STATUS.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* ملاحظات */}
+          <div className="form-group">
+            <label>ملاحظات</label>
+            <input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="اختياري"
+            />
+          </div>
         </div>
 
-        <Link href="/properties/add" className="primary-btn">
-          + إضافة عقار
-        </Link>
-      </div>
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button className="primary-btn" onClick={save} disabled={saving}>
+            {saving ? 'جاري الحفظ...' : 'حفظ'}
+          </button>
 
-      {/* ===== Table ===== */}
-      <div className="card">
-        <h3 className="card-title">قائمة العقارات</h3>
-
-        <table className="table">
-          <thead>
-            <tr>
-              <th>كود العقار</th>
-              <th>النوع</th>
-              <th>الموقع</th>
-              <th>المساحة</th>
-              <th>الحالة</th>
-              <th>إجراءات</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={6} style={{ textAlign: 'center' }} className="muted">
-                  لا توجد بيانات بعد
-                </td>
-              </tr>
-            )}
-
-            {rows.map((p) => (
-              <tr key={p.id}>
-                <td>
-                  <strong>{p.code}</strong>
-                </td>
-
-                <td>{PROPERTY_TYPE_LABEL[p.type] || '-'}</td>
-
-                <td>{p.location_text || p.location || '-'}</td>
-
-                <td>{p.area ?? '-'}</td>
-
-                <td>
-                  {p.status === 'rented' && (
-                    <span className="badge success">مؤجر</span>
-                  )}
-                  {p.status === 'vacant' && (
-                    <span className="badge warning">فاضي</span>
-                  )}
-                  {p.status === 'maintenance' && (
-                    <span className="badge danger">صيانة</span>
-                  )}
-                  {!['rented', 'vacant', 'maintenance'].includes(
-                    p.status || ''
-                  ) && <span className="badge">{p.status || '-'}</span>}
-                </td>
-
-                <td>
-                  <button
-                    className="btn btn-outline"
-                    style={{ color: '#e74c3c', borderColor: '#e74c3c' }}
-                    disabled={loading}
-                    onClick={() => deleteProperty(p.id)}
-                  >
-                    🗑 حذف
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+          <button
+            className="btn btn-outline"
+            type="button"
+            onClick={() => router.back()}
+          >
+            رجوع
+          </button>
+        </div>
       </div>
     </AppShell>
   );
