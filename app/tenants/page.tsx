@@ -10,9 +10,12 @@ import { supabase } from '@/lib/supabaseClient';
 type Tenant = {
   id: string;
   name: string;
+  nationality: string | null;
+  id_type: string | null;
   national_id: string;
   phone: string;
-  address: string;
+  email: string | null;
+  address: string | null;
 };
 
 export default function TenantsPage() {
@@ -20,9 +23,13 @@ export default function TenantsPage() {
 
   /* ===== Form State ===== */
   const [editingId, setEditingId] = useState<string | null>(null);
+
   const [name, setName] = useState('');
+  const [nationality, setNationality] = useState('');
+  const [idType, setIdType] = useState('');
   const [nationalId, setNationalId] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
 
   const [loading, setLoading] = useState(false);
@@ -80,7 +87,7 @@ export default function TenantsPage() {
 
     setLoading(true);
 
-    // ✅ منع تكرار رقم الهوية
+    // منع تكرار رقم الهوية
     const exists = await nationalIdExists();
     if (exists) {
       setLoading(false);
@@ -101,9 +108,12 @@ export default function TenantsPage() {
         .from('tenants')
         .update({
           name,
+          nationality: nationality || null,
+          id_type: idType || null,
           national_id: nationalId,
           phone,
-          address,
+          email: email || null,
+          address: address || null,
         })
         .eq('id', editingId);
 
@@ -116,9 +126,12 @@ export default function TenantsPage() {
       // إضافة
       const { error } = await supabase.from('tenants').insert({
         name,
+        nationality: nationality || null,
+        id_type: idType || null,
         national_id: nationalId,
         phone,
-        address,
+        email: email || null,
+        address: address || null,
       });
 
       if (error) {
@@ -152,7 +165,6 @@ export default function TenantsPage() {
     }
 
     const { error } = await supabase.from('tenants').delete().eq('id', id);
-
     setLoading(false);
 
     if (error) {
@@ -169,16 +181,22 @@ export default function TenantsPage() {
   const startEdit = (t: Tenant) => {
     setEditingId(t.id);
     setName(t.name);
+    setNationality(t.nationality || '');
+    setIdType(t.id_type || '');
     setNationalId(t.national_id);
     setPhone(t.phone);
+    setEmail(t.email || '');
     setAddress(t.address || '');
   };
 
   const resetForm = () => {
     setEditingId(null);
     setName('');
+    setNationality('');
+    setIdType('');
     setNationalId('');
     setPhone('');
+    setEmail('');
     setAddress('');
   };
 
@@ -189,33 +207,27 @@ export default function TenantsPage() {
     <AppShell title="المستأجرين">
       <div style={{ display: 'grid', gap: 24 }}>
 
-        {/* ===== Add / Edit Tenant ===== */}
+        {/* ===== Add / Edit ===== */}
         <div className="card">
           <h3 className="card-title">
             {editingId ? 'تعديل مستأجر' : 'إضافة مستأجر جديد'}
           </h3>
 
           <div className="form-grid">
-            <input
-              placeholder="اسم المستأجر"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <input
-              placeholder="رقم الهوية"
-              value={nationalId}
-              onChange={(e) => setNationalId(e.target.value)}
-            />
-            <input
-              placeholder="رقم الهاتف"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-            <input
-              placeholder="العنوان"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-            />
+            <input placeholder="اسم المستأجر" value={name} onChange={e => setName(e.target.value)} />
+            <input placeholder="الجنسية" value={nationality} onChange={e => setNationality(e.target.value)} />
+
+            <select value={idType} onChange={e => setIdType(e.target.value)}>
+              <option value="">نوع الهوية</option>
+              <option value="national">هوية وطنية</option>
+              <option value="passport">جواز سفر</option>
+              <option value="iqama">إقامة</option>
+            </select>
+
+            <input placeholder="رقم الهوية" value={nationalId} onChange={e => setNationalId(e.target.value)} />
+            <input placeholder="رقم الجوال" value={phone} onChange={e => setPhone(e.target.value)} />
+            <input placeholder="البريد الإلكتروني" value={email} onChange={e => setEmail(e.target.value)} />
+            <input placeholder="العنوان" value={address} onChange={e => setAddress(e.target.value)} />
           </div>
 
           <div style={{ display: 'flex', gap: 10 }}>
@@ -231,7 +243,7 @@ export default function TenantsPage() {
           </div>
         </div>
 
-        {/* ===== Tenants List ===== */}
+        {/* ===== List ===== */}
         <div className="card">
           <h3 className="card-title">قائمة المستأجرين</h3>
 
@@ -240,8 +252,8 @@ export default function TenantsPage() {
               <tr>
                 <th>الاسم</th>
                 <th>رقم الهوية</th>
-                <th>رقم الهاتف</th>
-                <th>العنوان</th>
+                <th>الجوال</th>
+                <th>الجنسية</th>
                 <th>إجراءات</th>
               </tr>
             </thead>
@@ -255,17 +267,14 @@ export default function TenantsPage() {
                 </tr>
               )}
 
-              {tenants.map((t) => (
+              {tenants.map(t => (
                 <tr key={t.id}>
                   <td>{t.name}</td>
                   <td>{t.national_id}</td>
                   <td>{t.phone}</td>
-                  <td>{t.address || '-'}</td>
+                  <td>{t.nationality || '-'}</td>
                   <td style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      className="btn btn-outline"
-                      onClick={() => startEdit(t)}
-                    >
+                    <button className="btn btn-outline" onClick={() => startEdit(t)}>
                       ✏️ تعديل
                     </button>
                     <button
