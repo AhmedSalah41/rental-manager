@@ -400,3 +400,127 @@ table tbody tr:hover{
 .stat.warning { color: #f59e0b; }
 .stat.danger { color: #ef4444; }
 
+/* =======================
+   ENHANCEMENTS (SAFE)
+   Additive only – no breaking changes
+======================= */
+
+/* ===== Topbar Pro Look ===== */
+.topbar {
+  background: linear-gradient(90deg, #ffffff 60%, #f3f6fb);
+  border-bottom: 1px solid var(--border);
+}
+
+.logo h1 {
+  letter-spacing: 0.5px;
+}
+
+.topbar-right {
+  gap: 18px;
+}
+
+/* notification wrapper (important) */
+.topbar-notifications {
+  position: relative;
+}
+
+.notif-btn {
+  padding: 8px;
+  border-radius: 50%;
+}
+
+.notif-btn:hover {
+  background: #f1f5f9;
+}
+
+/* dropdown fix (instead of fixed) */
+.notif-dropdown {
+  position: absolute;
+  top: 52px;
+  right: 0;
+  left: auto;
+}
+
+/* profile refinement */
+.profile-btn {
+  background: #fff;
+  border: 1px solid var(--border);
+}
+
+.profile-btn:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,.08);
+}
+
+/* ===== Sidebar Pro Look ===== */
+.sidebar {
+  background: linear-gradient(180deg, #ffffff 0%, #f9fafb 100%);
+}
+
+.sidebar-nav ul li a {
+  border-radius: 0 18px 18px 0;
+  margin: 4px 12px;
+  font-weight: 600;
+}
+
+.sidebar-nav ul li a i {
+  color: var(--muted);
+}
+
+.sidebar-nav ul li a:hover i,
+.sidebar-nav ul li.active a i {
+  color: var(--primary-color);
+}
+
+/* Active item polish */
+.sidebar-nav ul li.active a {
+  box-shadow: inset -4px 0 0 var(--primary-color);
+}
+
+/* ===== Reports Highlight ===== */
+.sidebar-nav ul li a[href="/reports"] {
+  background: rgba(44,90,160,.06);
+}
+
+.sidebar-nav ul li.active a[href="/reports"] {
+  background: rgba(44,90,160,.15);
+}
+
+/* ===== Cards Motion (SaaS feel) ===== */
+.card,
+.stat-card,
+.content-card {
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+
+.card:hover,
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0,0,0,.08);
+}
+
+/* ===== Page Header polish ===== */
+.page-header h1 {
+  font-weight: 900;
+  letter-spacing: .3px;
+}
+
+/* ===== Scrollbar subtle ===== */
+.sidebar-nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 10px;
+}
+
+/* ===== Mobile refinement ===== */
+@media(max-width:768px){
+  .sidebar {
+    background: #fff;
+  }
+
+  .topbar {
+    box-shadow: 0 1px 6px rgba(0,0,0,.1);
+  }
+}
