@@ -57,8 +57,8 @@ export default function Sidebar({
               <span />
             </Link>
           </li>
-          <li>
-            <Link href="/reports">
+          <li className={itemClass(pathname, '/reports')}>
+             <Link href="/reports">
               <i className="icon-chart" />
               <span>التقارير</span>
             </Link>
