@@ -66,7 +66,7 @@ export default function Sidebar({
           <li>
             <Link href="/reports/contracts">
               <i className="icon-chart" />
-              <span>التقارير</span>
+              <span>التقارير المالية</span>
             </Link>
           </li>
         </ul>
